@@ -1,17 +1,23 @@
 import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from 'react-native-paper';
 
-import { Text, View } from '@/components/Themed';
+import { colors } from '@/constants/Colors';
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ title: 'Not found' }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn't exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
+        <Text variant="titleLarge" style={styles.title}>
+          This screen does not exist.
+        </Text>
+        <Link href="/" asChild>
+          <Pressable style={styles.link}>
+            <Text variant="bodyLarge" style={styles.linkText}>
+              Back to start
+            </Text>
+          </Pressable>
         </Link>
       </View>
     </>
@@ -23,18 +29,20 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+    backgroundColor: colors.background,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    color: colors.secondary,
+    textAlign: 'center',
   },
   link: {
-    marginTop: 15,
-    paddingVertical: 15,
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   linkText: {
-    fontSize: 14,
-    color: '#2e78b7',
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
