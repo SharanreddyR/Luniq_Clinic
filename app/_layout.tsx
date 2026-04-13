@@ -7,7 +7,8 @@ import 'react-native-reanimated';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { colors } from '@/constants/Colors';
 
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -15,7 +16,8 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    ...FontAwesome.font,
+    ...MaterialCommunityIcons.font,
+    ...Ionicons.font,
   });
 
   useEffect(() => {
@@ -43,12 +45,16 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
-        <Stack.Screen name="home" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="clinic-settings" />
+        <Stack.Screen name="appointments" />
         <Stack.Screen name="patient-lookup" />
+        <Stack.Screen name="patient-verification" />
         <Stack.Screen name="opd" />
         <Stack.Screen name="upload" />
         <Stack.Screen name="claim" />
-        <Stack.Screen name="doctor-management" />
+        <Stack.Screen name="claim-status" />
+        <Stack.Screen name="doctor-availability" />
       </Stack>
     </AppProviders>
   );

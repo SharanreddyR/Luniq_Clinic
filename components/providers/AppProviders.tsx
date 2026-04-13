@@ -3,7 +3,8 @@ import { PropsWithChildren, useState } from 'react';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { clinicPaperTheme } from '@/constants/theme';
+import { clinicPaperTheme } from '@/constants';
+import { ToastProvider } from '@/components/providers/ToastProvider';
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -14,6 +15,9 @@ export function AppProviders({ children }: PropsWithChildren) {
             retry: 1,
             staleTime: 60_000,
           },
+          mutations: {
+            retry: 0,
+          },
         },
       }),
   );
@@ -21,7 +25,9 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <PaperProvider theme={clinicPaperTheme}>{children}</PaperProvider>
+        <PaperProvider theme={clinicPaperTheme}>
+          <ToastProvider>{children}</ToastProvider>
+        </PaperProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
   );

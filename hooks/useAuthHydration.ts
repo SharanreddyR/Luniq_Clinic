@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore } from '@/store';
 
 /** True after Zustand persist has rehydrated from AsyncStorage */
 export function useAuthHydration(): boolean {

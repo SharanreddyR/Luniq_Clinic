@@ -1,13 +1,14 @@
-import { api } from '@/services/api';
+import { api } from '@/services/http';
 
+/** @deprecated Use {@link OpdSlipPayload} / {@link createOpdSlip} for the OPD slip flow */
 export type OpdVisitPayload = {
   slipNumber: string;
   doctorId: number;
   doctorName: string;
-  /** Optional link to patient record */
   patientCardNumber?: string;
 };
 
+/** @deprecated */
 export type OpdVisitResponse = {
   id: number;
   slipNumber: string;
@@ -16,47 +17,56 @@ export type OpdVisitResponse = {
   message?: string;
 };
 
-export const OPD_DOCTORS = [
-  { id: 1, name: 'Dr. Priya Sharma' },
-  { id: 2, name: 'Dr. James Chen' },
-  { id: 3, name: 'Dr. Maria Garcia' },
+export const OPD_DEPARTMENTS = [
+  'General',
+  'Cardiology',
+  'Orthopedics',
+  'Pediatrics',
+  'ENT',
 ] as const;
 
-export function generateSlipNumber(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const r = String(Math.floor(1000 + Math.random() * 9000));
-  return `OPD-${y}${m}${day}-${r}`;
-}
+export type OpdSlipPayload = {
+  patientName: string;
+  department: string;
+  doctorId: number;
+  doctorName: string;
+  symptoms: string;
+};
+
+export type OpdSlipResponse = {
+  opdId: string;
+  status: string;
+};
 
 /**
- * Register OPD visit — POST /opd
+ * Create OPD slip — POST /opd
  */
-export async function saveOpdVisit(
-  payload: OpdVisitPayload,
-): Promise<OpdVisitResponse> {
+export async function createOpdSlip(
+  payload: OpdSlipPayload,
+): Promise<OpdSlipResponse> {
   try {
-    const { data } = await api.post<OpdVisitResponse>('/opd', {
+    const { data } = await api.post<OpdSlipResponse>('/opd', {
       ...payload,
-      registeredAt: new Date().toISOString(),
+      submittedAt: new Date().toISOString(),
     });
     return data;
   } catch {
     await delay(650);
-    if (!payload.slipNumber?.trim()) {
-      throw new Error('Generate a slip first.');
+    if (!payload.patientName?.trim()) {
+      throw new Error('Patient name is missing.');
+    }
+    if (!payload.department?.trim()) {
+      throw new Error('Select a department.');
     }
     if (!payload.doctorId || !payload.doctorName?.trim()) {
-      throw new Error('Assign a doctor.');
+      throw new Error('Select a doctor.');
+    }
+    if (!payload.symptoms?.trim()) {
+      throw new Error('Enter symptoms.');
     }
     return {
-      id: Math.floor(10000 + Math.random() * 90000),
-      slipNumber: payload.slipNumber,
-      doctorId: payload.doctorId,
-      doctorName: payload.doctorName,
-      message: 'Visit saved (demo)',
+      opdId: 'OPD12345',
+      status: 'created',
     };
   }
 }

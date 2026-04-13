@@ -3,7 +3,7 @@ import type { DocumentPickerAsset } from 'expo-document-picker';
 import { Platform } from 'react-native';
 
 import { API_BASE_URL } from '@/constants/config';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore } from '@/store';
 
 export type UploadCategory = 'prescription' | 'report' | 'bill';
 
@@ -16,6 +16,20 @@ export type UploadResponse = {
   id: string | number;
   fileName?: string;
   message?: string;
+  status?: string;
+};
+
+/** Row kept in screen state after a successful POST /upload (or mock). */
+export type UploadedFilePreview = {
+  localId: string;
+  category: UploadCategory;
+  name: string;
+  size: number | null;
+  mimeType: string | null;
+  uri: string;
+  uploadedAt: string;
+  serverId: string | number;
+  message?: string;
 };
 
 function uploadUrl(): string {
@@ -23,13 +37,18 @@ function uploadUrl(): string {
   return `${base}/upload`;
 }
 
-function appendFile(formData: FormData, asset: DocumentPickerAsset) {
+/** Append a picked document under a custom field name (e.g. claim multipart). */
+export function appendPickerAssetToFormData(
+  formData: FormData,
+  fieldName: string,
+  asset: DocumentPickerAsset,
+) {
   if (Platform.OS === 'web' && asset.file) {
-    formData.append('file', asset.file, asset.name);
+    formData.append(fieldName, asset.file, asset.name);
     return;
   }
   formData.append(
-    'file',
+    fieldName,
     {
       uri: asset.uri,
       name: asset.name,
@@ -38,8 +57,13 @@ function appendFile(formData: FormData, asset: DocumentPickerAsset) {
   );
 }
 
+function appendFile(formData: FormData, asset: DocumentPickerAsset) {
+  appendPickerAssetToFormData(formData, 'file', asset);
+}
+
 /**
- * POST /upload — multipart: `file`, `category` (prescription | report | bill)
+ * POST /upload — multipart: `file`, `category` (prescription | report | bill).
+ * On network / non-OK response, returns a mock payload (demo).
  */
 export async function uploadDocument(
   category: UploadCategory,
@@ -70,22 +94,46 @@ export async function uploadDocument(
 
     try {
       const data = (await res.json()) as UploadResponse;
-      return data;
+      return {
+        ...data,
+        fileName: data.fileName ?? asset.name,
+        status: data.status ?? 'uploaded',
+      };
     } catch {
       return {
         id: Date.now(),
         fileName: asset.name,
         message: 'Uploaded',
+        status: 'uploaded',
       };
     }
   } catch {
     await delay(750);
     return {
-      id: `demo-${Date.now()}`,
+      id: `mock-${Date.now()}`,
       fileName: asset.name,
-      message: `Uploaded ${category} (demo)`,
+      message: `POST /upload (mock) — ${category}`,
+      status: 'uploaded',
     };
   }
+}
+
+export function buildPreviewRecord(
+  category: UploadCategory,
+  asset: DocumentPickerAsset,
+  response: UploadResponse,
+): UploadedFilePreview {
+  return {
+    localId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    category,
+    name: asset.name ?? 'Document',
+    size: asset.size ?? null,
+    mimeType: asset.mimeType ?? null,
+    uri: asset.uri,
+    uploadedAt: new Date().toISOString(),
+    serverId: response.id,
+    message: response.message,
+  };
 }
 
 export async function pickDocument(): Promise<DocumentPickerAsset | null> {

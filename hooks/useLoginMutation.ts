@@ -1,18 +1,21 @@
 import { useMutation } from '@tanstack/react-query';
-import { router } from 'expo-router';
 
 import { clinicLoginRequest } from '@/services/authService';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore } from '@/store';
 
 export function useLoginMutation() {
   const setClinicSession = useAuthStore((s) => s.setClinicSession);
 
   return useMutation({
-    mutationFn: ({ email, password }: { email: string; password: string }) =>
-      clinicLoginRequest(email, password),
+    mutationFn: ({
+      phoneOrEmail,
+      password,
+    }: {
+      phoneOrEmail: string;
+      password: string;
+    }) => clinicLoginRequest(phoneOrEmail, password),
     onSuccess: (data) => {
       setClinicSession(data.token, data.clinic);
-      router.replace('/home');
     },
   });
 }

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,37 +11,50 @@ import {
   Appbar,
   Card,
   Divider,
-  Snackbar,
   Switch,
   Text,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
+import { useAppToast } from '@/hooks/useAppToast';
 import { useDoctors } from '@/hooks/useDoctors';
 import { useUpdateDoctorAvailability } from '@/hooks/useUpdateDoctorAvailability';
 import type { Doctor } from '@/services/doctorService';
 
-export default function DoctorManagementScreen() {
-  const [snack, setSnack] = useState('');
+export default function DoctorAvailabilityScreen() {
   const doctorsQuery = useDoctors();
   const updateAvailability = useUpdateDoctorAvailability();
+  const { showError, showSuccess } = useAppToast();
+  const listErrorToastShown = useRef(false);
 
   const list = doctorsQuery.data ?? [];
+
+  useEffect(() => {
+    if (doctorsQuery.isError && !listErrorToastShown.current) {
+      listErrorToastShown.current = true;
+      showError('Could not load doctors. Pull down to retry.');
+    }
+    if (!doctorsQuery.isError) {
+      listErrorToastShown.current = false;
+    }
+  }, [doctorsQuery.isError, showError]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <Appbar.Header mode="center-aligned" style={styles.header}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content
-          title="Doctor management"
-          titleStyle={styles.headerTitle}
+          title="Doctor availability"
+          titleStyle={clinicScreen.headerTitle}
         />
       </Appbar.Header>
 
       <Text variant="bodyMedium" style={styles.intro}>
-        Review schedules, turn availability on or off, and pull to refresh the
-        roster.
+        Roster from GET /doctors. Toggle updates POST /update-availability. Pull
+        down to refresh.
       </Text>
 
       {doctorsQuery.isPending && !doctorsQuery.data ? (
@@ -80,12 +93,20 @@ export default function DoctorManagementScreen() {
                 updateAvailability.isPending &&
                 updateAvailability.variables?.doctorId === item.id
               }
+              disableAll={updateAvailability.isPending}
               onToggle={(available) => {
                 updateAvailability.mutate(
                   { doctorId: item.id, available },
                   {
+                    onSuccess: () => {
+                      showSuccess(
+                        available
+                          ? 'Doctor marked available'
+                          : 'Doctor marked unavailable',
+                      );
+                    },
                     onError: (err) => {
-                      setSnack(
+                      showError(
                         err instanceof Error
                           ? err.message
                           : 'Could not update availability',
@@ -104,13 +125,10 @@ export default function DoctorManagementScreen() {
         />
       )}
 
-      <Snackbar
-        visible={snack.length > 0}
-        onDismiss={() => setSnack('')}
-        duration={3500}
-        style={styles.snack}>
-        {snack}
-      </Snackbar>
+      <LoadingOverlay
+        visible={updateAvailability.isPending}
+        message="Updating availability…"
+      />
     </SafeAreaView>
   );
 }
@@ -118,44 +136,48 @@ export default function DoctorManagementScreen() {
 function DoctorRow({
   doctor,
   busy,
+  disableAll,
   onToggle,
 }: {
   doctor: Doctor;
   busy: boolean;
+  disableAll: boolean;
   onToggle: (available: boolean) => void;
 }) {
   return (
-    <Card mode="elevated" style={styles.card}>
+    <Card mode="elevated" style={[clinicScreen.card, styles.card]}>
       <Card.Content>
-        <View style={styles.rowTop}>
-          <View style={styles.nameBlock}>
-            <Text variant="titleMedium" style={styles.name}>
-              {doctor.name}
-            </Text>
-            <View style={styles.timingRow}>
-              <Text variant="labelSmall" style={styles.timingLabel}>
-                Timing
-              </Text>
-              <Text variant="bodyMedium" style={styles.timing}>
-                {doctor.timing}
-              </Text>
-            </View>
-          </View>
+        <Text variant="titleMedium" style={styles.name}>
+          {doctor.name}
+        </Text>
+        <Text variant="bodyMedium" style={styles.department}>
+          {doctor.department}
+        </Text>
+
+        <View style={styles.slotsBlock}>
+          <Text variant="labelSmall" style={styles.slotsLabel}>
+            Time slots
+          </Text>
+          <Text variant="bodyMedium" style={styles.slotsValue}>
+            {doctor.timing}
+          </Text>
         </View>
+
         <Divider style={styles.divider} />
-        <View style={styles.rowBottom}>
-          <View>
-            <Text variant="labelLarge" style={styles.availLabel}>
-              Available
+
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleText}>
+            <Text variant="labelLarge" style={styles.toggleTitle}>
+              Availability
             </Text>
-            <Text variant="bodySmall" style={styles.availHint}>
-              {doctor.available ? 'Accepting patients' : 'Not accepting now'}
+            <Text variant="bodySmall" style={styles.toggleState}>
+              {doctor.available ? 'Available' : 'Not available'}
             </Text>
           </View>
           <Switch
             value={doctor.available}
             onValueChange={onToggle}
-            disabled={busy}
+            disabled={busy || disableAll}
             color={colors.primary}
           />
         </View>
@@ -173,91 +195,83 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     elevation: 0,
   },
-  headerTitle: {
-    color: colors.secondary,
-    fontWeight: '600',
-  },
   intro: {
-    color: colors.textMuted,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    lineHeight: 22,
+    ...typography.subtitle,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   sep: {
-    height: 12,
+    height: spacing.md,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-  },
-  rowTop: {
-    marginBottom: 8,
-  },
-  nameBlock: {
-    gap: 6,
-  },
+  card: {},
   name: {
-    color: colors.secondary,
-    fontWeight: '700',
+    ...typography.title,
   },
-  timingRow: {
-    marginTop: 4,
+  department: {
+    ...typography.subtitle,
+    marginTop: spacing.xs,
   },
-  timingLabel: {
-    color: colors.textMuted,
+  slotsBlock: {
+    marginTop: spacing.md,
+  },
+  slotsLabel: {
+    ...typography.small,
     marginBottom: 2,
   },
-  timing: {
-    color: colors.text,
-    lineHeight: 22,
+  slotsValue: {
+    ...typography.subtitle,
   },
   divider: {
     backgroundColor: colors.border,
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
-  rowBottom: {
+  toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  availLabel: {
+  toggleText: {
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  toggleTitle: {
     color: colors.secondary,
     fontWeight: '600',
+    fontSize: typography.subtitle.fontSize,
+    lineHeight: typography.subtitle.lineHeight,
   },
-  availHint: {
-    color: colors.textMuted,
+  toggleState: {
+    ...typography.small,
     marginTop: 2,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: spacing.xl,
   },
   loadingText: {
-    color: colors.textMuted,
-    marginTop: 12,
+    ...typography.subtitle,
+    marginTop: spacing.md,
   },
   errorText: {
+    ...typography.title,
     color: colors.error,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   muted: {
-    color: colors.textMuted,
+    ...typography.subtitle,
     textAlign: 'center',
   },
   empty: {
-    color: colors.textMuted,
+    ...typography.subtitle,
     textAlign: 'center',
-    paddingVertical: 24,
-  },
-  snack: {
-    marginBottom: 24,
+    paddingVertical: spacing.lg,
   },
 });

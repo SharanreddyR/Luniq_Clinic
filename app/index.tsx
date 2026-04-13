@@ -6,7 +6,7 @@ import { Text } from 'react-native-paper';
 import { ClinicLogo } from '@/components/ClinicLogo';
 import { colors } from '@/constants/Colors';
 import { useAuthHydration } from '@/hooks/useAuthHydration';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore } from '@/store';
 
 const SPLASH_MS = 2000;
 
@@ -18,7 +18,7 @@ export default function SplashRoute() {
     if (!hydrated) return;
 
     const id = setTimeout(() => {
-      router.replace(isAuthenticated ? '/home' : '/login');
+      router.replace(isAuthenticated ? '/home' : '/register');
     }, SPLASH_MS);
 
     return () => clearTimeout(id);

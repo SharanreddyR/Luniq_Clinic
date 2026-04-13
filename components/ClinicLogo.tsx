@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
+import { clinicIcons } from '@/constants';
 import { APP_NAME } from '@/constants/config';
 import { colors } from '@/constants/Colors';
 
@@ -23,7 +24,7 @@ export function ClinicLogo({ compact, variant = 'default' }: Props) {
         ]}>
         <MaterialCommunityIcons
           name="hospital-building"
-          size={compact ? 36 : 48}
+          size={compact ? clinicIcons.size.lg : 40}
           color={onPrimary ? colors.primary : colors.onPrimary}
         />
       </View>

@@ -1,25 +1,22 @@
 import { useMutation } from '@tanstack/react-query';
-import { router } from 'expo-router';
 
-import { registerRequest } from '@/services/authService';
-import { useAuthStore } from '@/store/authStore';
+import {
+  type RegisterClinicPayload,
+  registerRequest,
+} from '@/services/authService';
+import { useAuthStore } from '@/store';
 
 export function useRegisterMutation() {
-  const setUserSession = useAuthStore((s) => s.setUserSession);
+  const setClinicSession = useAuthStore((s) => s.setClinicSession);
 
   return useMutation({
-    mutationFn: ({
-      name,
-      email,
-      password,
-    }: {
-      name: string;
-      email: string;
-      password: string;
-    }) => registerRequest(name, email, password),
-    onSuccess: (data) => {
-      setUserSession(data.token, data.user);
-      router.replace('/home');
+    mutationFn: (payload: RegisterClinicPayload) => registerRequest(payload),
+    onSuccess: (data, variables) => {
+      setClinicSession(data.token, {
+        ...data.clinic,
+        contactName:
+          data.clinic.contactName?.trim() || variables.name.trim(),
+      });
     },
   });
 }

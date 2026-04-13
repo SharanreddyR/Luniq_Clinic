@@ -1,5 +1,5 @@
-import { Link } from 'expo-router';
-import { useState } from 'react';
+import { Link, router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,29 +8,63 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Button, HelperText, Text, TextInput } from 'react-native-paper';
+import {
+  Button,
+  Card,
+  HelperText,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { ClinicLogo } from '@/components/ClinicLogo';
+import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
+import { useAppToast } from '@/hooks/useAppToast';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
-import { isValidEmail } from '@/utils/validation';
+import { isValidPhoneOrEmail } from '@/utils';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
 
   const login = useLoginMutation();
+  const { showError, showSuccess } = useAppToast();
 
-  const emailError =
-    email.length > 0 && !isValidEmail(email) ? 'Enter a valid email' : '';
+  useEffect(() => {
+    login.reset();
+  }, [phoneOrEmail, password]);
+
+  const identifierError =
+    phoneOrEmail.length > 0 && !isValidPhoneOrEmail(phoneOrEmail)
+      ? 'Enter a valid email or phone number (10+ digits)'
+      : '';
+
   const canSubmit =
-    isValidEmail(email) && password.length >= 1 && !login.isPending;
+    isValidPhoneOrEmail(phoneOrEmail) &&
+    password.length >= 1 &&
+    !login.isPending;
 
   function onSubmit() {
     if (!canSubmit) return;
-    login.mutate({ email: email.trim(), password });
+    login.mutate(
+      { phoneOrEmail: phoneOrEmail.trim(), password },
+      {
+        onSuccess: () => {
+          showSuccess('Signed in. Welcome back.');
+          router.replace('/home');
+        },
+        onError: (err) => {
+          showError(
+            err instanceof Error
+              ? err.message
+              : 'Sign-in failed. Try again.',
+          );
+        },
+      },
+    );
   }
 
   return (
@@ -39,7 +73,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}>
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <ClinicLogo compact />
@@ -47,22 +81,26 @@ export default function LoginScreen() {
             Clinic login
           </Text>
           <Text variant="bodyMedium" style={styles.hint}>
-            Sign in with your clinic portal credentials
+            Sign in with your phone or email and password
           </Text>
 
+          <Card style={clinicScreen.card} mode="elevated">
+            <Card.Content>
           <TextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
+            label="Phone or email"
+            value={phoneOrEmail}
+            onChangeText={setPhoneOrEmail}
             mode="outlined"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
+            autoComplete="username"
+            textContentType="username"
             style={styles.input}
-            error={!!emailError}
+            error={!!identifierError}
+            disabled={login.isPending}
           />
-          <HelperText type="error" visible={!!emailError}>
-            {emailError}
+          <HelperText type="error" visible={!!identifierError}>
+            {identifierError}
           </HelperText>
 
           <TextInput
@@ -72,45 +110,48 @@ export default function LoginScreen() {
             mode="outlined"
             secureTextEntry={secure}
             autoComplete="password"
+            textContentType="password"
             style={styles.input}
+            disabled={login.isPending}
             right={
               <TextInput.Icon
                 icon={secure ? 'eye-off' : 'eye'}
-                onPress={() => setSecure((s) => !s)}
+                disabled={login.isPending}
+                onPress={() => {
+                  if (!login.isPending) setSecure((s) => !s);
+                }}
               />
             }
           />
-
-          {login.isError && (
-            <HelperText type="error" visible>
-              {login.error instanceof Error
-                ? login.error.message
-                : 'Something went wrong'}
-            </HelperText>
-          )}
 
           <Button
             mode="contained"
             onPress={onSubmit}
             loading={login.isPending}
             disabled={!canSubmit}
-            style={styles.button}
-            contentStyle={styles.buttonContent}>
-            Sign in
+            style={[clinicScreen.button, styles.button]}
+            contentStyle={clinicScreen.buttonContent}>
+            Sign in to dashboard
           </Button>
+            </Card.Content>
+          </Card>
 
           <View style={styles.footer}>
             <Text variant="bodyMedium" style={styles.footerText}>
-              New here?{' '}
+              Need to register your clinic?{' '}
             </Text>
             <Link href="/register" asChild>
-              <Pressable hitSlop={8}>
+              <Pressable hitSlop={8} disabled={login.isPending}>
                 <Text style={styles.link}>Create an account</Text>
               </Pressable>
             </Link>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <LoadingOverlay
+        visible={login.isPending}
+        message="Signing you in…"
+      />
     </SafeAreaView>
   );
 }
@@ -124,38 +165,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
   heading: {
-    color: colors.secondary,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...typography.title,
+    marginBottom: spacing.xs,
   },
   hint: {
-    color: colors.textMuted,
-    marginBottom: 24,
+    ...typography.subtitle,
+    marginBottom: spacing.lg,
   },
   input: {
     marginBottom: 0,
     backgroundColor: colors.surface,
   },
   button: {
-    marginTop: 16,
-    borderRadius: 8,
-  },
-  buttonContent: {
-    paddingVertical: 6,
+    marginTop: 20,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 28,
+    marginTop: spacing.xl,
     flexWrap: 'wrap',
   },
   footerText: {
-    color: colors.textMuted,
+    ...typography.subtitle,
   },
   link: {
     color: colors.primary,

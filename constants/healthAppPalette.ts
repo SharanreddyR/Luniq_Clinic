@@ -1,0 +1,42 @@
+/**
+ * HEALTHAPP colour system — single source of truth for Luniq Clinic / Clinic App.
+ *
+ * Role map:
+ * - Primary (#2ebdb4): actions, links, selected tab, key icons
+ * - Secondary (#062d2f): chrome, headers, strong titles
+ * - Background (#f4f9f9): screen body behind cards
+ * - Surface (#ffffff): cards, sheets, inputs
+ * - Text primary / secondary: headings & body vs captions & metadata
+ * - Accent (#c4f542): profile highlights, rings (sparingly)
+ *
+ * Native splash (`app.json`) uses `primary`; Paper/theme consume `colors` only.
+ */
+export const HEALTHAPP_PRIMARY = '#2ebdb4' as const;
+export const HEALTHAPP_SECONDARY = '#062d2f' as const;
+export const HEALTHAPP_BACKGROUND = '#f4f9f9' as const;
+export const HEALTHAPP_ACCENT = '#c4f542' as const;
+
+/** Mid tone for MD3 secondaryContainer / info surfaces */
+const HEALTHAPP_SECONDARY_ELEVATED = '#0d4a4d' as const;
+
+export const healthAppColors = {
+  primary: HEALTHAPP_PRIMARY,
+  secondary: HEALTHAPP_SECONDARY,
+  accent: HEALTHAPP_ACCENT,
+  /** Text/icons on accent (e.g. lime chip) */
+  onAccent: HEALTHAPP_SECONDARY,
+  secondaryElevated: HEALTHAPP_SECONDARY_ELEVATED,
+  background: HEALTHAPP_BACKGROUND,
+  surface: '#ffffff',
+  /** Subtle fill vs background */
+  surfaceVariant: '#e8f4f4',
+  onPrimary: '#ffffff',
+  onSecondary: '#ffffff',
+  text: HEALTHAPP_SECONDARY,
+  textMuted: '#4a6b6d',
+  border: '#c5dedb',
+  error: '#b3261e',
+  success: '#1b7a6c',
+} as const;
+
+export type HealthAppColors = typeof healthAppColors;

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { AuthUser, Clinic } from '@/services/authService';
+import type { AuthUser, Clinic } from '@/types/auth';
 
 type AuthState = {
   token: string | null;

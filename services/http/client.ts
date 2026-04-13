@@ -1,8 +1,12 @@
 import axios from 'axios';
 
 import { API_BASE_URL } from '@/constants/config';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore } from '@/store';
 
+/**
+ * Shared Axios instance for JSON APIs. Uses {@link API_BASE_URL}.
+ * Auth: Bearer token from Zustand when present.
+ */
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20_000,
