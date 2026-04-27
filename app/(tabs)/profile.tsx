@@ -69,7 +69,6 @@ export default function ProfileScreen() {
             {APP_NAME}
           </Text>
           <Text variant="bodyLarge" style={styles.heroTag}>
-            
           </Text>
         </LinearGradient>
 
