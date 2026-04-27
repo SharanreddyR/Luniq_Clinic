@@ -2,16 +2,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import {
-  Appbar,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Text,
-} from 'react-native-paper';
+import { Button, Card, Chip, Divider, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import {
   clinicIcons,
@@ -125,13 +119,7 @@ export default function UploadCenterScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Appbar.Header mode="center-aligned" style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content
-          title="Upload center"
-          titleStyle={clinicScreen.headerTitle}
-        />
-      </Appbar.Header>
+      <CompactScreenHeader title="Upload center" />
 
       <ScrollView
         contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
@@ -267,10 +255,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.surface,
-    elevation: 0,
   },
   scroll: {
     paddingTop: spacing.sm,

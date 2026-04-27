@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
@@ -49,13 +50,17 @@ export function DashboardCard({ title, subtitle, icon, onPress }: Props) {
       accessibilityLabel={title}>
       <Card mode="elevated" style={styles.card}>
         <Card.Content style={styles.content}>
-          <View style={styles.iconWrap}>
+          <LinearGradient
+            colors={['rgba(46, 189, 180, 0.22)', colors.surfaceVariant]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.iconWrap}>
             <DashboardGlyph
               icon={icon}
               size={mainSize}
               color={clinicIcons.color.primary}
             />
-          </View>
+          </LinearGradient>
           <Text variant="titleMedium" style={styles.title} numberOfLines={2}>
             {title}
           </Text>
@@ -92,6 +97,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     minHeight: 172,
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadows.card,
   },
   content: {
@@ -103,10 +110,10 @@ const styles = StyleSheet.create({
     width: ICON_WRAP,
     height: ICON_WRAP,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceVariant,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: clinicIcons.textGap,
+    overflow: 'hidden',
   },
   title: {
     ...typography.title,

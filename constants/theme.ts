@@ -5,9 +5,17 @@ import { colors } from '@/constants/Colors';
 const baseFonts = MD3LightTheme.fonts;
 
 /** React Native Paper MD3 — clinic palette, 10px roundness, readable type scale */
-export const clinicPaperTheme: MD3Theme = {
+export const clinicPaperTheme = {
   ...MD3LightTheme,
   roundness: 10,
+  /** Paper reads this at runtime; MD3Theme type omits `components` in some versions. */
+  components: {
+    Button: {
+      defaultProps: {
+        compact: true,
+      },
+    },
+  },
   fonts: {
     ...baseFonts,
     titleLarge: {
@@ -75,4 +83,4 @@ export const clinicPaperTheme: MD3Theme = {
     error: colors.error,
     onBackground: colors.text,
   },
-};
+} as MD3Theme;

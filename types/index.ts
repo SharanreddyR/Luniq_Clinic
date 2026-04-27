@@ -9,4 +9,6 @@ export type {
   PatientCardType,
   PatientMember,
   PatientRecord,
+  PatientVisitSession,
+  VisitSessionDoctor,
 } from './patient';

@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
 /** @deprecated Use `/patient-intake` — single-page visit flow */
-export default function PatientVerificationRedirect() {
+export default function PatientVisitDetailsRedirect() {
   return <Redirect href="/patient-intake" />;
 }

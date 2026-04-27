@@ -19,5 +19,10 @@ export {
   spacing,
   typography,
 } from './clinicUi';
-export { API_BASE_URL, APP_NAME } from './config';
+export {
+  ADMIN_CLAIM_APPROVAL_EMAIL,
+  API_BASE_URL,
+  APP_NAME,
+} from './config';
+export { DEFAULT_VISIT_SERVICES } from './visitServices';
 export { clinicPaperTheme } from './theme';

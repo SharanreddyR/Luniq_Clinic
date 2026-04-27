@@ -1,27 +1,17 @@
 import { Link, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import {
   Button,
-  Card,
   HelperText,
   Text,
   TextInput,
 } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthScaffold } from '@/components/auth/AuthScaffold';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { ClinicLogo } from '@/components/ClinicLogo';
-import { clinicScreen, spacing, typography } from '@/constants';
+import { clinicScreen, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
-import { useAppToast } from '@/hooks/useAppToast';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
 import { isValidPhoneOrEmail } from '@/utils';
 
@@ -29,12 +19,13 @@ export default function LoginScreen() {
   const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const login = useLoginMutation();
-  const { showError, showSuccess } = useAppToast();
 
   useEffect(() => {
     login.reset();
+    setSubmitError(null);
   }, [phoneOrEmail, password]);
 
   const identifierError =
@@ -49,15 +40,15 @@ export default function LoginScreen() {
 
   function onSubmit() {
     if (!canSubmit) return;
+    setSubmitError(null);
     login.mutate(
       { phoneOrEmail: phoneOrEmail.trim(), password },
       {
         onSuccess: () => {
-          showSuccess('Signed in. Welcome back.');
           router.replace('/home');
         },
         onError: (err) => {
-          showError(
+          setSubmitError(
             err instanceof Error
               ? err.message
               : 'Sign-in failed. Try again.',
@@ -68,132 +59,149 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <ClinicLogo compact />
-          <Text variant="headlineSmall" style={styles.heading}>
-            Clinic login
-          </Text>
-          <Text variant="bodyMedium" style={styles.hint}>
-            Sign in with your phone or email and password
-          </Text>
-
-          <Card style={clinicScreen.card} mode="elevated">
-            <Card.Content>
-          <TextInput
-            label="Phone or email"
-            value={phoneOrEmail}
-            onChangeText={setPhoneOrEmail}
-            mode="outlined"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="username"
-            textContentType="username"
-            style={styles.input}
-            error={!!identifierError}
-            disabled={login.isPending}
-          />
-          <HelperText type="error" visible={!!identifierError}>
-            {identifierError}
-          </HelperText>
-
-          <TextInput
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry={secure}
-            autoComplete="password"
-            textContentType="password"
-            style={styles.input}
-            disabled={login.isPending}
-            right={
-              <TextInput.Icon
-                icon={secure ? 'eye-off' : 'eye'}
-                disabled={login.isPending}
-                onPress={() => {
-                  if (!login.isPending) setSecure((s) => !s);
-                }}
-              />
-            }
-          />
-
-          <Button
-            mode="contained"
-            onPress={onSubmit}
-            loading={login.isPending}
-            disabled={!canSubmit}
-            style={[clinicScreen.button, styles.button]}
-            contentStyle={clinicScreen.buttonContent}>
-            Sign in to dashboard
-          </Button>
-            </Card.Content>
-          </Card>
-
-          <View style={styles.footer}>
-            <Text variant="bodyMedium" style={styles.footerText}>
-              Need to register your clinic?{' '}
-            </Text>
-            <Link href="/register" asChild>
-              <Pressable hitSlop={8} disabled={login.isPending}>
-                <Text style={styles.link}>Create an account</Text>
-              </Pressable>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <LoadingOverlay
-        visible={login.isPending}
-        message="Signing you in…"
+    <>
+    <AuthScaffold
+      cardTitle="Login"
+      cardSubtitle="Sign in to continue to your clinic dashboard."
+      footer={
+        <View style={styles.footerRow}>
+          <Text style={styles.footerMuted}>Need a clinic account? </Text>
+          <Link href="/register" asChild>
+            <Pressable hitSlop={10} disabled={login.isPending}>
+              <Text style={styles.footerLink}>Sign up</Text>
+            </Pressable>
+          </Link>
+        </View>
+      }>
+      <TextInput
+        mode="flat"
+        label="Phone or email"
+        value={phoneOrEmail}
+        onChangeText={setPhoneOrEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="username"
+        textContentType="username"
+        style={styles.input}
+        underlineColor={colors.border}
+        activeUnderlineColor={colors.primary}
+        left={<TextInput.Icon icon="account-outline" color={colors.textMuted} />}
+        error={!!identifierError}
+        disabled={login.isPending}
       />
-    </SafeAreaView>
+      <HelperText type="error" visible={!!identifierError}>
+        {identifierError}
+      </HelperText>
+
+      <TextInput
+        mode="flat"
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={secure}
+        autoComplete="password"
+        textContentType="password"
+        style={styles.inputSpaced}
+        underlineColor={colors.border}
+        activeUnderlineColor={colors.primary}
+        left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
+        disabled={login.isPending}
+        right={
+          <TextInput.Icon
+            icon={secure ? 'eye-off' : 'eye'}
+            disabled={login.isPending}
+            onPress={() => {
+              if (!login.isPending) setSecure((s) => !s);
+            }}
+          />
+        }
+      />
+
+      <Pressable
+        onPress={() => {}}
+        style={styles.forgotWrap}
+        accessibilityRole="button"
+        accessibilityLabel="Forgot password — contact clinic admin">
+        <Text style={styles.forgotText}>Forgot password?</Text>
+      </Pressable>
+
+      {submitError ? (
+        <HelperText type="error" visible style={styles.submitError}>
+          {submitError}
+        </HelperText>
+      ) : null}
+
+      <Button
+        mode="contained"
+        onPress={onSubmit}
+        loading={login.isPending}
+        disabled={!canSubmit}
+        buttonColor={colors.secondary}
+        textColor={colors.onPrimary}
+        style={[clinicScreen.button, styles.primaryBtn]}
+        contentStyle={clinicScreen.buttonContent}>
+        Sign in
+      </Button>
+
+      <Link href="/register" asChild>
+        <Button
+          mode="contained"
+          disabled={login.isPending}
+          buttonColor={colors.primary}
+          textColor={colors.onPrimary}
+          style={[clinicScreen.button, styles.secondaryBtn]}
+          contentStyle={clinicScreen.buttonContent}>
+          Create clinic account
+        </Button>
+      </Link>
+    </AuthScaffold>
+    <LoadingOverlay visible={login.isPending} message="Signing you in…" />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  heading: {
-    ...typography.title,
-    marginBottom: spacing.xs,
-  },
-  hint: {
-    ...typography.subtitle,
-    marginBottom: spacing.lg,
-  },
   input: {
+    backgroundColor: 'transparent',
     marginBottom: 0,
-    backgroundColor: colors.surface,
   },
-  button: {
-    marginTop: 20,
+  inputSpaced: {
+    backgroundColor: 'transparent',
+    marginTop: spacing.md,
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-    flexWrap: 'wrap',
+  forgotWrap: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.xs,
   },
-  footerText: {
-    ...typography.subtitle,
-  },
-  link: {
+  forgotText: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  submitError: {
+    marginBottom: spacing.sm,
+  },
+  primaryBtn: {
+    marginTop: spacing.md,
+  },
+  secondaryBtn: {
+    marginTop: spacing.lg,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerMuted: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 15,
+  },
+  footerLink: {
+    color: colors.primary,
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

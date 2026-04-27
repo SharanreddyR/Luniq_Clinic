@@ -1,28 +1,19 @@
 import { Link, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  Appbar,
   Button,
-  Card,
+  Checkbox,
   Divider,
   HelperText,
   Text,
   TextInput,
 } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthBackLink, AuthScaffold } from '@/components/auth/AuthScaffold';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { ClinicLogo } from '@/components/ClinicLogo';
-import { APP_NAME, clinicScreen, colors, spacing, typography } from '@/constants';
-import { useAppToast } from '@/hooks/useAppToast';
+import { clinicScreen, spacing } from '@/constants';
+import { colors } from '@/constants/Colors';
 import { useRegisterMutation } from '@/hooks/useRegisterMutation';
 import { isValidEmail } from '@/utils';
 
@@ -34,12 +25,14 @@ export default function RegisterScreen() {
   const [clinicName, setClinicName] = useState('');
   const [clinicAddress, setClinicAddress] = useState('');
   const [secure, setSecure] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const register = useRegisterMutation();
-  const { showError, showSuccess } = useAppToast();
 
   useEffect(() => {
     register.reset();
+    setSubmitError(null);
   }, [name, email, password, clinicName, clinicAddress]);
 
   const emailError =
@@ -63,10 +56,12 @@ export default function RegisterScreen() {
     password.length >= 6 &&
     clinicName.trim().length >= 2 &&
     clinicAddress.trim().length >= 8 &&
+    termsAccepted &&
     !register.isPending;
 
   function onSubmit() {
     if (!canSubmit) return;
+    setSubmitError(null);
     register.mutate(
       {
         name: name.trim(),
@@ -77,11 +72,10 @@ export default function RegisterScreen() {
       },
       {
         onSuccess: () => {
-          showSuccess('Clinic registered. You can use the dashboard now.');
           router.replace('/home');
         },
         onError: (err) => {
-          showError(
+          setSubmitError(
             err instanceof Error
               ? err.message
               : 'Registration failed. Try again.',
@@ -92,208 +86,232 @@ export default function RegisterScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Appbar.Header mode="center-aligned" style={styles.header}>
-        {router.canGoBack() ? (
-          <Appbar.BackAction onPress={() => router.back()} />
-        ) : null}
-        <Appbar.Content
-          title="Register clinic"
-          titleStyle={clinicScreen.headerTitle}
-        />
-      </Appbar.Header>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <ClinicLogo compact />
-          <Text variant="headlineSmall" style={styles.heading}>
-            Join {APP_NAME}
-          </Text>
-          <Text variant="bodyMedium" style={styles.hint}>
-            Register your clinic first, then you can sign in anytime.
-          </Text>
-
-          <Card style={clinicScreen.card} mode="elevated">
-            <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>
-            Your details
-          </Text>
-          <TextInput
-            label="Full name *"
-            value={name}
-            onChangeText={setName}
-            mode="outlined"
-            autoComplete="name"
-            style={styles.input}
-            disabled={register.isPending}
-          />
-
-          <TextInput
-            label="Email *"
-            value={email}
-            onChangeText={setEmail}
-            mode="outlined"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            style={styles.input}
-            error={!!emailError}
-            disabled={register.isPending}
-          />
-          <HelperText type="error" visible={!!emailError}>
-            {emailError}
-          </HelperText>
-
-          <TextInput
-            label="Password *"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry={secure}
-            autoComplete="new-password"
-            style={styles.input}
-            error={!!passwordError}
-            disabled={register.isPending}
-            right={
-              <TextInput.Icon
-                icon={secure ? 'eye-off' : 'eye'}
-                disabled={register.isPending}
-                onPress={() => {
-                  if (!register.isPending) setSecure((s) => !s);
-                }}
-              />
-            }
-          />
-          <HelperText type="error" visible={!!passwordError}>
-            {passwordError}
-          </HelperText>
-
-          <Divider style={styles.divider} />
-
-          <Text variant="titleSmall" style={styles.sectionLabel}>
-            Clinic details
-          </Text>
-          <TextInput
-            label="Clinic name *"
-            value={clinicName}
-            onChangeText={setClinicName}
-            mode="outlined"
-            style={styles.input}
-            error={!!clinicNameError}
-            disabled={register.isPending}
-          />
-          <HelperText type="error" visible={!!clinicNameError}>
-            {clinicNameError}
-          </HelperText>
-
-          <TextInput
-            label="Clinic address *"
-            value={clinicAddress}
-            onChangeText={setClinicAddress}
-            mode="outlined"
-            multiline
-            numberOfLines={4}
-            style={[styles.input, styles.addressInput]}
-            placeholder="Street, city, postal code"
-            error={!!addressError}
-            disabled={register.isPending}
-          />
-          <HelperText type="error" visible={!!addressError}>
-            {addressError}
-          </HelperText>
-
-          <Button
-            mode="contained"
-            onPress={onSubmit}
-            loading={register.isPending}
-            disabled={!canSubmit}
-            style={[clinicScreen.button, styles.button]}
-            contentStyle={clinicScreen.buttonContent}>
-            Register & go to dashboard
-          </Button>
-            </Card.Content>
-          </Card>
-
-          <View style={styles.footer}>
-            <Text variant="bodyMedium" style={styles.footerText}>
-              Already registered?{' '}
-            </Text>
+    <>
+      <AuthScaffold
+        cardTitle="Sign up"
+        cardSubtitle="Register your clinic to start using the dashboard."
+        headerAccessory={
+          router.canGoBack() ? (
+            <AuthBackLink label="Back" onPress={() => router.back()} />
+          ) : null
+        }
+        footer={
+          <View style={styles.footerRow}>
+            <Text style={styles.footerMuted}>Already have an account? </Text>
             <Link href="/login" asChild>
-              <Pressable hitSlop={8} disabled={register.isPending}>
-                <Text style={styles.link}>Sign in</Text>
+              <Pressable hitSlop={10} disabled={register.isPending}>
+                <Text style={styles.footerLink}>Login</Text>
               </Pressable>
             </Link>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        }>
+        <TextInput
+          mode="flat"
+          label="Full name"
+          value={name}
+          onChangeText={setName}
+          autoComplete="name"
+          style={styles.input}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={<TextInput.Icon icon="account-outline" color={colors.textMuted} />}
+          disabled={register.isPending}
+        />
+
+        <TextInput
+          mode="flat"
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          style={styles.inputSpaced}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={<TextInput.Icon icon="email-outline" color={colors.textMuted} />}
+          error={!!emailError}
+          disabled={register.isPending}
+        />
+        <HelperText type="error" visible={!!emailError}>
+          {emailError}
+        </HelperText>
+
+        <TextInput
+          mode="flat"
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={secure}
+          autoComplete="new-password"
+          style={styles.inputSpaced}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
+          error={!!passwordError}
+          disabled={register.isPending}
+          right={
+            <TextInput.Icon
+              icon={secure ? 'eye-off' : 'eye'}
+              disabled={register.isPending}
+              onPress={() => {
+                if (!register.isPending) setSecure((s) => !s);
+              }}
+            />
+          }
+        />
+        <HelperText type="error" visible={!!passwordError}>
+          {passwordError}
+        </HelperText>
+
+        <Divider style={styles.divider} />
+
+        <Text variant="titleSmall" style={styles.sectionLabel}>
+          Clinic
+        </Text>
+
+        <TextInput
+          mode="flat"
+          label="Clinic name"
+          value={clinicName}
+          onChangeText={setClinicName}
+          style={styles.inputSpaced}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={
+            <TextInput.Icon icon="hospital-building" color={colors.textMuted} />
+          }
+          error={!!clinicNameError}
+          disabled={register.isPending}
+        />
+        <HelperText type="error" visible={!!clinicNameError}>
+          {clinicNameError}
+        </HelperText>
+
+        <TextInput
+          mode="flat"
+          label="Clinic address"
+          value={clinicAddress}
+          onChangeText={setClinicAddress}
+          multiline
+          numberOfLines={3}
+          style={[styles.inputSpaced, styles.addressInput]}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={<TextInput.Icon icon="map-marker-outline" color={colors.textMuted} />}
+          placeholder="Street, city, postal code"
+          error={!!addressError}
+          disabled={register.isPending}
+        />
+        <HelperText type="error" visible={!!addressError}>
+          {addressError}
+        </HelperText>
+
+        <View style={styles.termsRow}>
+          <Checkbox.Android
+            status={termsAccepted ? 'checked' : 'unchecked'}
+            onPress={() => setTermsAccepted((v) => !v)}
+            color={colors.primary}
+            disabled={register.isPending}
+          />
+          <Pressable
+            onPress={() => setTermsAccepted((v) => !v)}
+            style={styles.termsPress}
+            disabled={register.isPending}>
+            <Text variant="bodyMedium" style={styles.termsText}>
+              I agree to the{' '}
+              <Text style={styles.termsBold}>Terms &amp; conditions</Text>
+            </Text>
+          </Pressable>
+        </View>
+
+        {submitError ? (
+          <HelperText type="error" visible style={styles.submitError}>
+            {submitError}
+          </HelperText>
+        ) : null}
+
+        <Button
+          mode="contained"
+          onPress={onSubmit}
+          loading={register.isPending}
+          disabled={!canSubmit}
+          buttonColor={colors.secondary}
+          textColor={colors.onPrimary}
+          style={[clinicScreen.button, styles.submitBtn]}
+          contentStyle={clinicScreen.buttonContent}>
+          Register
+        </Button>
+      </AuthScaffold>
       <LoadingOverlay
         visible={register.isPending}
         message="Creating your clinic account…"
       />
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.surface,
-    elevation: 0,
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-  },
-  heading: {
-    ...typography.title,
-    marginBottom: spacing.xs,
-  },
-  hint: {
-    ...typography.subtitle,
-    marginBottom: spacing.lg,
-  },
-  sectionLabel: {
-    ...typography.title,
-    fontSize: 15,
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-  },
   input: {
+    backgroundColor: 'transparent',
     marginBottom: 0,
-    backgroundColor: colors.surface,
   },
-  addressInput: {
-    minHeight: 100,
-    textAlignVertical: 'top',
+  inputSpaced: {
+    backgroundColor: 'transparent',
+    marginTop: spacing.md,
   },
   divider: {
     marginVertical: spacing.lg,
     backgroundColor: colors.border,
   },
-  button: {
-    marginTop: 16,
+  sectionLabel: {
+    fontWeight: '700',
+    color: colors.secondary,
+    marginBottom: spacing.xs,
   },
-  footer: {
+  addressInput: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
+  termsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
     marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  termsPress: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  termsText: {
+    color: colors.text,
+    lineHeight: 22,
+  },
+  termsBold: {
+    fontWeight: '800',
+    color: colors.secondary,
+    textDecorationLine: 'underline',
+  },
+  submitError: {
+    marginBottom: spacing.sm,
+  },
+  submitBtn: {
+    marginTop: spacing.sm,
+  },
+  footerRow: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  footerText: {
-    ...typography.subtitle,
+  footerMuted: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 15,
   },
-  link: {
+  footerLink: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

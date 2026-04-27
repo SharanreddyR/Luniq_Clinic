@@ -9,7 +9,8 @@ import {
 
 export const CLINIC_CARD_RADIUS = radii.card;
 export const CLINIC_BUTTON_RADIUS = radii.button;
-export const CLINIC_BUTTON_MIN_HEIGHT = 50;
+/** Default tap target for primary actions (compact / sm). */
+export const CLINIC_BUTTON_MIN_HEIGHT = 36;
 export const SCREEN_EDGE = spacing.lg;
 
 /** Screen scroll container — horizontal 16, vertical rhythm 12–16 */
@@ -36,16 +37,18 @@ export const clinicScreen = {
   button: {
     borderRadius: radii.button,
   },
-  buttonContent: {
-    paddingVertical: 13,
+  buttonContent:{
+    paddingVertical: 4,
+    paddingHorizontal: 12,
     minHeight: CLINIC_BUTTON_MIN_HEIGHT,
   },
   buttonCompact: {
     borderRadius: radii.button,
   },
   buttonContentCompact: {
-    paddingVertical: 11,
-    minHeight: 48,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    minHeight: 32,
   },
   headerTitle: typography.headerTitle,
 } as const;

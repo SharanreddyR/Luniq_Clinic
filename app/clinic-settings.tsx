@@ -7,7 +7,6 @@ import {
   View,
 } from 'react-native';
 import {
-  Appbar,
   Button,
   Card,
   HelperText,
@@ -17,6 +16,7 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
@@ -83,13 +83,7 @@ export default function ClinicSettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Appbar.Header mode="center-aligned" style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content
-          title="Clinic settings"
-          titleStyle={clinicScreen.headerTitle}
-        />
-      </Appbar.Header>
+      <CompactScreenHeader title="Clinic settings" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -190,10 +184,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.surface,
-    elevation: 0,
   },
   flex: {
     flex: 1,

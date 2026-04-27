@@ -7,10 +7,14 @@ import { useAuthStore } from '@/store';
 
 /** Shown after a successful claim submission */
 export const CLAIM_POST_VERIFICATION_MESSAGE =
-  'Claim under verification (3–4 hours)';
+  'Submitted. Admin e-mail approval and background verification usually take about 10–15 minutes at the lead. You will receive updates on this claim ID.';
 
 /** @deprecated Prefer {@link CLAIM_POST_VERIFICATION_MESSAGE} */
 export const CLAIM_VERIFICATION_TAT = CLAIM_POST_VERIFICATION_MESSAGE;
+
+/** Shown on claim status when lifecycle is approved */
+export const CLAIM_APPROVED_DELIVERY_NOTE =
+  'Approved. A formal approval summary is sent to the patient and to the clinic (per insurer / clinic policy).';
 
 export type ClaimPatientOption = {
   id: number;
@@ -138,7 +142,7 @@ export const CLAIM_LIFECYCLE_LABELS: Record<ClaimLifecycleStatus, string> = {
 };
 
 export const CLAIM_STATUS_TRACKING_NOTE =
-  'Verification takes 3–4 hours. Our team may call the patient.';
+  'Lead review and background verification typically take about 10–15 minutes after admin approval. Our team may contact the patient if needed.';
 
 export type ClaimStatusResponse = {
   status: string;

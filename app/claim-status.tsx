@@ -7,7 +7,6 @@ import {
   View,
 } from 'react-native';
 import {
-  Appbar,
   Button,
   Card,
   Chip,
@@ -17,12 +16,14 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
 import { useClaimStatus } from '@/hooks/useClaimStatus';
 import {
+  CLAIM_APPROVED_DELIVERY_NOTE,
   CLAIM_LIFECYCLE_LABELS,
   CLAIM_STATUS_TRACKING_NOTE,
   type ClaimLifecycleStatus,
@@ -152,13 +153,7 @@ export default function ClaimStatusScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Appbar.Header mode="center-aligned" style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content
-          title="Claim status"
-          titleStyle={clinicScreen.headerTitle}
-        />
-      </Appbar.Header>
+      <CompactScreenHeader title="Claim status" />
 
       <ScrollView
         contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
@@ -265,7 +260,9 @@ export default function ClaimStatusScreen() {
                   Note
                 </Text>
                 <Text variant="bodyMedium" style={styles.noteBody}>
-                  {CLAIM_STATUS_TRACKING_NOTE}
+                  {lifecycle === 'approved'
+                    ? `${CLAIM_APPROVED_DELIVERY_NOTE}\n\n${CLAIM_STATUS_TRACKING_NOTE}`
+                    : CLAIM_STATUS_TRACKING_NOTE}
                 </Text>
               </Card.Content>
             </Card>
@@ -284,10 +281,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.surface,
-    elevation: 0,
   },
   scroll: {
     paddingTop: spacing.sm,

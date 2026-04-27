@@ -64,9 +64,10 @@ export const typography = {
     lineHeight: 18,
   } satisfies TextStyle,
   headerTitle: {
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '700' as TextStyle['fontWeight'],
     color: colors.text,
+    letterSpacing: 0.2,
   } satisfies TextStyle,
 } as const;
 

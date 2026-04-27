@@ -7,15 +7,10 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import {
-  Appbar,
-  Card,
-  Divider,
-  Switch,
-  Text,
-} from 'react-native-paper';
+import { Card, Divider, Switch, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
@@ -44,13 +39,7 @@ export default function DoctorAvailabilityScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Appbar.Header mode="center-aligned" style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content
-          title="Doctor availability"
-          titleStyle={clinicScreen.headerTitle}
-        />
-      </Appbar.Header>
+      <CompactScreenHeader title="Doctor availability" />
 
       <Text variant="bodyMedium" style={styles.intro}>
         Roster from GET /doctors. Toggle updates POST /update-availability. Pull
@@ -190,10 +179,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.surface,
-    elevation: 0,
   },
   intro: {
     ...typography.subtitle,

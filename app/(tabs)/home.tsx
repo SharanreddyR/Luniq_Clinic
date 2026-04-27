@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar, Button, Card, Text } from 'react-native-paper';
@@ -8,6 +9,7 @@ import {
   type ClinicDashboardIcon,
   DashboardCard,
 } from '@/components/dashboard/DashboardCard';
+import { BrandLogoMark } from '@/components/ClinicLogo';
 import {
   APP_NAME,
   clinicIcons,
@@ -25,14 +27,20 @@ const DASHBOARD_CARDS: {
   title: string;
   subtitle: string;
   icon: ClinicDashboardIcon;
-  href: '/patient-lookup' | '/appointments' | '/claim' | '/claim-status' | '/doctor-availability' | '/upload' | '/clinic-settings';
+  href:
+    | '/patient-intake'
+    | '/appointments'
+    | '/claim-status'
+    | '/doctor-availability'
+    | '/upload'
+    | '/clinic-settings';
 }[] = [
   {
     key: 'patient',
-    title: 'Enter patient card',
-    subtitle: 'Look up a patient by card number',
+    title: 'Patient visit',
+    subtitle: 'One page: card, doctor, services, uploads & save',
     icon: { pack: 'material', name: 'account-injury' },
-    href: '/patient-lookup',
+    href: '/patient-intake',
   },
   {
     key: 'appointments',
@@ -40,13 +48,6 @@ const DASHBOARD_CARDS: {
     subtitle: 'Today, upcoming, and visit status',
     icon: { pack: 'material', name: 'calendar' },
     href: '/appointments',
-  },
-  {
-    key: 'claims',
-    title: 'Claims',
-    subtitle: 'Submit and track insurance claims',
-    icon: { pack: 'material', name: 'file-document' },
-    href: '/claim',
   },
   {
     key: 'claim-status',
@@ -78,6 +79,9 @@ const DASHBOARD_CARDS: {
   },
 ];
 
+const HERO_TOP = 'rgba(46, 189, 180, 0.14)';
+const HERO_MID = 'rgba(244, 249, 249, 0.98)';
+
 export default function ClinicDashboardScreen() {
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
@@ -87,7 +91,12 @@ export default function ClinicDashboardScreen() {
   const displayName =
     clinic?.contactName ?? user?.name ?? clinic?.name ?? 'Clinic';
   const displaySub = clinic
-    ? [clinic.name, clinic.address ? `Clinic ID: ${clinic.id}\n${clinic.address}` : `Clinic ID: ${clinic.id}`]
+    ? [
+        clinic.name,
+        clinic.address
+          ? `Clinic ID: ${clinic.id}\n${clinic.address}`
+          : `Clinic ID: ${clinic.id}`,
+      ]
         .filter(Boolean)
         .join('\n')
     : (user?.email ?? '');
@@ -100,94 +109,103 @@ export default function ClinicDashboardScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
-        contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
+        contentContainerStyle={styles.scrollOuter}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={goProfile}
-            style={styles.profileBlock}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile">
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={clinicIcons.size.lg}
-              color={clinicIcons.color.secondary}
-              style={styles.profileIcon}
-            />
-            <View style={styles.topBarText}>
-              <Text variant="labelLarge" style={styles.greetingLabel}>
-                Clinic dashboard
-              </Text>
-              <Text variant="headlineSmall" style={styles.name}>
-                {displayName}
-              </Text>
-              <Text variant="bodySmall" style={styles.email}>
-                {displaySub}
-              </Text>
+        <LinearGradient
+          colors={[HERO_TOP, HERO_MID, colors.background]}
+          locations={[0, 0.55, 1]}
+          style={styles.hero}>
+          <View style={[clinicScreen.screenPadding, styles.heroInner]}>
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={goProfile}
+                style={styles.profileBlock}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile">
+                <View style={styles.iconBubble}>
+                  <BrandLogoMark size={28} padded />
+                </View>
+                <View style={styles.topBarText}>
+                  <Text variant="labelLarge" style={styles.greetingLabel}>
+                    Welcome back
+                  </Text>
+                  <Text variant="headlineSmall" style={styles.name}>
+                    {displayName}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.email}>
+                    {displaySub}
+                  </Text>
+                </View>
+              </Pressable>
+              <Pressable
+                onPress={goProfile}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile"
+                hitSlop={10}
+                style={({ pressed }) => [
+                  styles.avatarPress,
+                  pressed && styles.avatarPressPressed,
+                ]}>
+                <Avatar.Text size={52} label={initial} style={styles.avatar} />
+              </Pressable>
             </View>
-          </Pressable>
-          <Pressable
-            onPress={goProfile}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.avatarPress,
-              pressed && styles.avatarPressPressed,
-            ]}>
-            <Avatar.Text size={48} label={initial} style={styles.avatar} />
-          </Pressable>
-        </View>
+          </View>
+        </LinearGradient>
 
-        {activePatient ? (
-          <Card style={styles.patientStrip} mode="elevated">
-            <Card.Content style={styles.patientStripContent}>
-              <MaterialCommunityIcons
-                name="account-injury"
-                size={clinicIcons.size.md}
-                color={clinicIcons.color.primary}
-                style={styles.patientStripIcon}
+        <View style={[clinicScreen.screenPadding, styles.body]}>
+          {activePatient ? (
+            <Card style={styles.patientStrip} mode="elevated">
+              <Card.Content style={styles.patientStripContent}>
+                <MaterialCommunityIcons
+                  name="account-injury"
+                  size={clinicIcons.size.md}
+                  color={clinicIcons.color.primary}
+                  style={styles.patientStripIcon}
+                />
+                <View style={styles.patientStripText}>
+                  <Text variant="labelSmall" style={styles.patientStripLabel}>
+                    Active patient
+                  </Text>
+                  <Text variant="titleSmall" style={styles.patientStripName}>
+                    {activePatient.name}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.patientStripCard}>
+                    Card {activePatient.cardNumber}
+                    {activePatient.cardType
+                      ? ` · ${activePatient.cardType}`
+                      : ''}
+                  </Text>
+                </View>
+                <Button mode="text" compact onPress={clearActivePatient}>
+                  Clear
+                </Button>
+              </Card.Content>
+            </Card>
+          ) : null}
+
+          <View style={styles.sectionHead}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Quick actions
+            </Text>
+            <View style={styles.sectionRule} />
+          </View>
+
+          <View style={styles.grid}>
+            {DASHBOARD_CARDS.map((item) => (
+              <DashboardCard
+                key={item.key}
+                title={item.title}
+                subtitle={item.subtitle}
+                icon={item.icon}
+                onPress={() => router.push(item.href as Href)}
               />
-              <View style={styles.patientStripText}>
-                <Text variant="labelSmall" style={styles.patientStripLabel}>
-                  Active patient
-                </Text>
-                <Text variant="titleSmall" style={styles.patientStripName}>
-                  {activePatient.name}
-                </Text>
-                <Text variant="bodySmall" style={styles.patientStripCard}>
-                  Card {activePatient.cardNumber}
-                  {activePatient.cardType
-                    ? ` · ${activePatient.cardType}`
-                    : ''}
-                </Text>
-              </View>
-              <Button mode="text" compact onPress={clearActivePatient}>
-                Clear
-              </Button>
-            </Card.Content>
-          </Card>
-        ) : null}
+            ))}
+          </View>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>
-          Quick actions
-        </Text>
-
-        <View style={styles.grid}>
-          {DASHBOARD_CARDS.map((item) => (
-            <DashboardCard
-              key={item.key}
-              title={item.title}
-              subtitle={item.subtitle}
-              icon={item.icon}
-              onPress={() => router.push(item.href as Href)}
-            />
-          ))}
+          <Text variant="bodySmall" style={styles.footerNote}>
+            {APP_NAME} · Secure healthcare access
+          </Text>
         </View>
-
-        <Text variant="bodySmall" style={styles.footerNote}>
-          {APP_NAME} · Secure healthcare access
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -198,15 +216,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scroll: {
+  scrollOuter: {
     paddingBottom: spacing.sm,
+  },
+  hero: {
+    borderBottomLeftRadius: radii.lg,
+    borderBottomRightRadius: radii.lg,
+    marginBottom: spacing.md,
+    ...shadows.card,
+    shadowOpacity: 0.05,
+    elevation: 2,
+  },
+  heroInner: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  body: {
+    paddingTop: 0,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.lg,
-    paddingTop: spacing.xs,
   },
   profileBlock: {
     flex: 1,
@@ -214,9 +245,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginRight: spacing.sm,
   },
-  profileIcon: {
-    marginRight: clinicIcons.textGap,
-    marginTop: 2,
+  iconBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   topBarText: {
     flex: 1,
@@ -231,24 +269,31 @@ const styles = StyleSheet.create({
   },
   greetingLabel: {
     ...typography.small,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
     marginBottom: spacing.xs,
   },
   name: {
     ...typography.title,
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 22,
+    lineHeight: 30,
+    color: colors.secondary,
   },
   email: {
     ...typography.subtitle,
     marginTop: spacing.xs,
   },
   avatar: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
   },
   patientStrip: {
     marginBottom: spacing.lg,
     backgroundColor: colors.surface,
     borderRadius: radii.card,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     ...shadows.card,
   },
   patientStripContent: {
@@ -278,9 +323,20 @@ const styles = StyleSheet.create({
     ...typography.small,
     marginTop: spacing.xs / 2,
   },
+  sectionHead: {
+    marginBottom: spacing.md,
+  },
   sectionTitle: {
     ...typography.title,
-    marginBottom: spacing.md,
+    fontSize: 18,
+    color: colors.secondary,
+    marginBottom: spacing.sm,
+  },
+  sectionRule: {
+    height: 3,
+    width: 40,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
   },
   grid: {
     flexDirection: 'row',
@@ -292,6 +348,7 @@ const styles = StyleSheet.create({
   footerNote: {
     ...typography.small,
     textAlign: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
+    opacity: 0.85,
   },
 });

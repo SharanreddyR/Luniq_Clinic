@@ -19,10 +19,14 @@ export default function MainTabsLayout() {
         },
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          paddingTop: 6,
-          height: 56 + Math.max(insets.bottom, 8),
+          borderTopWidth: 0,
+          elevation: 12,
+          shadowColor: '#062d2f',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          paddingTop: 8,
+          height: 58 + Math.max(insets.bottom, 8),
           paddingBottom: Math.max(insets.bottom, 8),
         },
       }}>
