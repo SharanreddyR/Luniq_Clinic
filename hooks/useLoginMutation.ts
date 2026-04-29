@@ -1,10 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 
-import { clinicLoginRequest } from '@/services/authService';
+import { loginRequest } from '@/services/authService';
 import { useAuthStore } from '@/store';
 
 export function useLoginMutation() {
   const setClinicSession = useAuthStore((s) => s.setClinicSession);
+  const setUserSession = useAuthStore((s) => s.setUserSession);
 
   return useMutation({
     mutationFn: ({
@@ -13,9 +14,13 @@ export function useLoginMutation() {
     }: {
       phoneOrEmail: string;
       password: string;
-    }) => clinicLoginRequest(phoneOrEmail, password),
+    }) => loginRequest(phoneOrEmail, password),
     onSuccess: (data) => {
-      setClinicSession(data.token, data.clinic);
+      if (data.kind === 'clinic') {
+        setClinicSession(data.token, data.clinic);
+      } else {
+        setUserSession(data.token, data.user);
+      }
     },
   });
 }

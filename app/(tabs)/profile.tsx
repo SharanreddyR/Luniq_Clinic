@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { BrandLogoMark } from '@/components/ClinicLogo';
 import { APP_NAME, clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
+import { useClinicProfile } from '@/hooks/useClinicProfile';
 import { useAuthStore } from '@/store';
 import { clearAllPersistedAppState } from '@/utils/clearAppPersistence';
 
@@ -32,15 +33,21 @@ function initialsFor(name: string): string {
 export default function ProfileScreen() {
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
+  const clinicProfileQuery = useClinicProfile();
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const remote = clinicProfileQuery.data;
   const staffName =
-    user?.name ??
-    clinic?.contactName ??
+    remote?.contactName ||
+    user?.name ||
+    clinic?.contactName ||
     (clinic?.name ? 'Clinic staff' : 'Guest');
-  const clinicName = clinic?.name ?? 'Not linked';
-  const phone = clinic?.phone ?? user?.phone ?? 'Not set';
-  const email = user?.email ?? '—';
+  const clinicName = remote?.clinicName || clinic?.name || 'Not linked';
+  const phone = remote?.phone || clinic?.phone || user?.phone || 'Not set';
+  const email = remote?.email || user?.email || '—';
+  const addressLine = [remote?.address, remote?.city, remote?.state, remote?.pincode]
+    .filter((x): x is string => Boolean(x && x.trim()))
+    .join(', ');
 
   async function onLogout() {
     setLoggingOut(true);
@@ -69,6 +76,7 @@ export default function ProfileScreen() {
             {APP_NAME}
           </Text>
           <Text variant="bodyLarge" style={styles.heroTag}>
+            .
           </Text>
         </LinearGradient>
 
@@ -144,7 +152,35 @@ export default function ProfileScreen() {
                     </View>
                   )}
                 />
+                {addressLine ? (
+                  <List.Item
+                    title="Address"
+                    description={addressLine}
+                    descriptionNumberOfLines={3}
+                    titleStyle={styles.listTitle}
+                    descriptionStyle={styles.listDesc}
+                    left={() => (
+                      <View style={styles.rowIcon}>
+                        <MaterialCommunityIcons
+                          name="map-marker-outline"
+                          size={22}
+                          color={colors.primary}
+                        />
+                      </View>
+                    )}
+                  />
+                ) : null}
               </List.Section>
+              {!clinicProfileQuery.isFetching && !remote ? (
+                <Text variant="bodySmall" style={styles.notFoundText}>
+                  Data not found.
+                </Text>
+              ) : null}
+              {clinicProfileQuery.isFetching ? (
+                <Text variant="bodySmall" style={styles.fetchHint}>
+                  Refreshing profile from server…
+                </Text>
+              ) : null}
             </Card.Content>
           </Card>
 
@@ -294,6 +330,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
+  },
+  fetchHint: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginLeft: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  notFoundText: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginLeft: spacing.sm,
+    marginBottom: spacing.xs,
   },
   actions: {
     gap: spacing.sm,

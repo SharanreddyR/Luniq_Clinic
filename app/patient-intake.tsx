@@ -23,6 +23,7 @@ import { patientRecordForMember } from '@/utils/patientSelection';
 
 const PHOTO_SIZE = 64;
 const PHOTO_R = 32;
+const CARD_PREFIX = 'LNQ-';
 
 const LINKED_CARD: PatientCardType[] = ['Family', 'Couple', 'Child'];
 
@@ -39,9 +40,14 @@ export default function PatientIntakeScreen() {
   const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
   const clearVisitSession = usePatientStore((s) => s.clearVisitSession);
 
-  const [input, setInput] = useState('');
+  const [inputSuffix, setInputSuffix] = useState('');
   const [lookupHit, setLookupHit] = useState<PatientRecord | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const inputFocusProps = {
+    outlineColor: colors.border,
+    activeOutlineColor: colors.primary,
+    selectionColor: colors.primary,
+  } as const;
 
   const lookup = usePatientByCardMutation();
   const lookupRef = useRef(lookup);
@@ -51,11 +57,11 @@ export default function PatientIntakeScreen() {
     useCallback(() => {
       const scanned = usePatientStore.getState().consumePendingCardInput();
       if (!scanned) return;
-      setInput(scanned);
+      setInputSuffix(normalizeCardSuffix(scanned));
       setLookupHit(null);
       setLookupError(null);
       lookupRef.current.reset();
-      lookupRef.current.mutate(scanned, {
+      lookupRef.current.mutate(normalizeCard(scanned), {
         onSuccess: (data) => {
           setLookupHit(data);
           setLookupError(null);
@@ -70,11 +76,12 @@ export default function PatientIntakeScreen() {
     }, []),
   );
 
-  function runLookup(trimmed: string) {
-    if (!trimmed) return;
+  function runLookup(raw: string) {
+    const normalized = normalizeCard(raw);
+    if (!normalized) return;
     setLookupHit(null);
     setLookupError(null);
-    lookup.mutate(trimmed, {
+    lookup.mutate(normalized, {
       onSuccess: (data) => {
         setLookupHit(data);
         setLookupError(null);
@@ -102,7 +109,7 @@ export default function PatientIntakeScreen() {
     clearVisitSession();
     setLookupHit(null);
     setLookupError(null);
-    setInput('');
+    setInputSuffix('');
     lookup.reset();
   }
 
@@ -117,12 +124,6 @@ export default function PatientIntakeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
-            <Text variant="labelLarge" style={styles.heroKicker}>
-              Step 1 · Reception
-            </Text>
-            <Text variant="headlineSmall" style={styles.flowTitle}>
-              Find patient
-            </Text>
             <Text variant="bodyMedium" style={styles.flowSub}>
               Scan or type the card number, search, then confirm who is being
               seen today. Family cards show everyone on the plan.
@@ -168,9 +169,9 @@ export default function PatientIntakeScreen() {
               </Text>
               <TextInput
                 label="Card number"
-                value={input}
+                value={inputSuffix}
                 onChangeText={(v) => {
-                  setInput(v);
+                  setInputSuffix(normalizeCardSuffix(v));
                   setLookupHit(null);
                   setLookupError(null);
                   lookup.reset();
@@ -179,7 +180,9 @@ export default function PatientIntakeScreen() {
                 autoCapitalize="characters"
                 autoCorrect={false}
                 style={styles.input}
-                onSubmitEditing={() => runLookup(input.trim())}
+                {...inputFocusProps}
+                left={<TextInput.Affix text={CARD_PREFIX} />}
+                onSubmitEditing={() => runLookup(inputSuffix)}
                 returnKeyType="search"
                 disabled={lookup.isPending}
               />
@@ -195,9 +198,9 @@ export default function PatientIntakeScreen() {
                 </Button>
                 <Button
                   mode="contained"
-                  onPress={() => runLookup(input.trim())}
+                  onPress={() => runLookup(inputSuffix)}
                   loading={lookup.isPending}
-                  disabled={!input.trim() || lookup.isPending}
+                  disabled={!inputSuffix.trim() || lookup.isPending}
                   style={styles.half}
                   contentStyle={styles.btnIn}>
                   Search
@@ -221,35 +224,37 @@ export default function PatientIntakeScreen() {
               {lookupHit && !lookup.isPending ? (
                 <View style={styles.resultsBlock}>
                   <Text variant="titleSmall" style={styles.resultsTitle}>
-                    Patient on this card
+                    Membership lookup
                   </Text>
 
-                  <View style={styles.personCard}>
+                  <View style={styles.membershipCard}>
+                    <View style={styles.membershipTop}>
+                      <Text variant="labelMedium" style={styles.membershipBadge}>
+                        {lookupHit.cardType ? `${lookupHit.cardType} plan` : 'Membership'}
+                      </Text>
+                      {lookupHit.status ? (
+                        <Text
+                          variant="labelSmall"
+                          style={[
+                            styles.statusPill,
+                            lookupHit.isValid ? styles.statusOk : styles.statusWarn,
+                          ]}>
+                          {lookupHit.status.toUpperCase()}
+                        </Text>
+                      ) : null}
+                    </View>
                     <View style={styles.personTop}>
-                      <Image
-                        source={{ uri: lookupHit.photo }}
-                        style={styles.hitPhoto}
-                      />
+                      <Image source={{ uri: lookupHit.photo }} style={styles.hitPhoto} />
                       <View style={styles.personTextCol}>
-                        <Text variant="titleMedium" style={styles.hitName}>
+                        <Text variant="titleMedium" style={styles.hitNameOnCard}>
                           {lookupHit.name}
                         </Text>
-                        <Text variant="labelSmall" style={styles.hitLabel}>
-                          Card number
-                        </Text>
-                        <Text variant="bodyMedium" style={styles.hitCardNo}>
+                        <Text variant="bodySmall" style={styles.metaLineOnCard}>
                           {lookupHit.cardNumber}
                         </Text>
-                        {lookupHit.cardType ? (
-                          <>
-                            <Text variant="labelSmall" style={styles.hitLabel}>
-                              Card type
-                            </Text>
-                            <Text variant="bodyMedium" style={styles.hitCardType}>
-                              {lookupHit.cardType} card
-                            </Text>
-                          </>
-                        ) : null}
+                        <Text variant="bodySmall" style={styles.metaLineOnCard}>
+                          {lookupHit.planType ?? '—'} · Expires {lookupHit.expiresAt ?? '—'}
+                        </Text>
                       </View>
                     </View>
                     <Button
@@ -268,7 +273,7 @@ export default function PatientIntakeScreen() {
                         Members on this card ({lookupHit.members!.length})
                       </Text>
                       {lookupHit.members!.map((m, index) => (
-                        <View key={`${m.name}-${index}`} style={styles.personCard}>
+                        <View key={`${m.name}-${index}`} style={styles.memberCard}>
                           <View style={styles.personTop}>
                             <Image
                               source={{ uri: m.photo }}
@@ -278,30 +283,15 @@ export default function PatientIntakeScreen() {
                               <Text variant="titleMedium" style={styles.hitName}>
                                 {m.name}
                               </Text>
-                              <Text variant="labelSmall" style={styles.hitLabel}>
-                                Mobile
-                              </Text>
                               <Text variant="bodyMedium" style={styles.hitMobile}>
-                                {m.mobile}
+                                {m.name} · {m.relation ?? 'member'}
                               </Text>
-                              <Text variant="labelSmall" style={styles.hitLabel}>
-                                Card number
-                              </Text>
-                              <Text variant="bodyMedium" style={styles.hitCardNo}>
+                              <Text variant="bodySmall" style={styles.metaLine}>
                                 {lookupHit.cardNumber}
                               </Text>
-                              {lookupHit.cardType ? (
-                                <>
-                                  <Text variant="labelSmall" style={styles.hitLabel}>
-                                    Card type
-                                  </Text>
-                                  <Text
-                                    variant="bodyMedium"
-                                    style={styles.hitCardType}>
-                                    {lookupHit.cardType} card
-                                  </Text>
-                                </>
-                              ) : null}
+                              <Text variant="bodySmall" style={styles.metaLine}>
+                                Age: {m.age ?? '—'} · Gender: {m.gender ?? '—'}
+                              </Text>
                             </View>
                           </View>
                           <Button
@@ -324,6 +314,18 @@ export default function PatientIntakeScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function normalizeCard(raw: string): string {
+  const cleaned = raw.toUpperCase().replace(/\s+/g, '');
+  if (!cleaned) return '';
+  return cleaned.startsWith(CARD_PREFIX) ? cleaned : `${CARD_PREFIX}${cleaned}`;
+}
+
+function normalizeCardSuffix(raw: string): string {
+  const full = normalizeCard(raw);
+  if (!full) return '';
+  return full.slice(CARD_PREFIX.length);
 }
 
 const styles = StyleSheet.create({
@@ -388,7 +390,50 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     color: colors.secondary,
   },
+  membershipCard: {
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: '#0f3d5c',
+    borderWidth: 1,
+    borderColor: '#156b8a',
+  },
+  membershipTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  membershipBadge: {
+    color: '#c9f4f0',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  statusOk: {
+    color: '#104832',
+    backgroundColor: '#b2f5d6',
+  },
+  statusWarn: {
+    color: '#5a3200',
+    backgroundColor: '#ffd89f',
+  },
   personCard: {
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  memberCard: {
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: radii.card,
@@ -414,6 +459,19 @@ const styles = StyleSheet.create({
     color: colors.secondary,
     marginBottom: spacing.sm,
   },
+  hitNameOnCard: {
+    fontWeight: '700',
+    color: colors.onPrimary,
+    marginBottom: spacing.sm,
+  },
+  metaLine: {
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  metaLineOnCard: {
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 2,
+  },
   hitLabel: {
     color: colors.textMuted,
     marginTop: spacing.xs,
@@ -429,7 +487,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   hitMobile: {
-    color: colors.text,
+    color: colors.secondary,
   },
   confirmBelow: {
     alignSelf: 'stretch',

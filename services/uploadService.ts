@@ -19,7 +19,7 @@ export type UploadResponse = {
   status?: string;
 };
 
-/** Row kept in screen state after a successful POST /upload (or mock). */
+/** Row kept in screen state after a successful POST /upload. */
 export type UploadedFilePreview = {
   localId: string;
   category: UploadCategory;
@@ -63,7 +63,6 @@ function appendFile(formData: FormData, asset: DocumentPickerAsset) {
 
 /**
  * POST /upload — multipart: `file`, `category` (prescription | report | bill).
- * On network / non-OK response, returns a mock payload (demo).
  */
 export async function uploadDocument(
   category: UploadCategory,
@@ -81,41 +80,21 @@ export async function uploadDocument(
     (headers as Record<string, string>).Authorization = `Bearer ${token}`;
   }
 
-  try {
-    const res = await fetch(uploadUrl(), {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+  const res = await fetch(uploadUrl(), {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
 
-    if (!res.ok) {
-      throw new Error(`Upload failed (${res.status})`);
-    }
-
-    try {
-      const data = (await res.json()) as UploadResponse;
-      return {
-        ...data,
-        fileName: data.fileName ?? asset.name,
-        status: data.status ?? 'uploaded',
-      };
-    } catch {
-      return {
-        id: Date.now(),
-        fileName: asset.name,
-        message: 'Uploaded',
-        status: 'uploaded',
-      };
-    }
-  } catch {
-    await delay(750);
-    return {
-      id: `mock-${Date.now()}`,
-      fileName: asset.name,
-      message: `POST /upload (mock) — ${category}`,
-      status: 'uploaded',
-    };
+  if (!res.ok) {
+    throw new Error(`Upload failed (${res.status})`);
   }
+  const data = (await res.json()) as UploadResponse;
+  return {
+    ...data,
+    fileName: data.fileName ?? asset.name,
+    status: data.status ?? 'uploaded',
+  };
 }
 
 export function buildPreviewRecord(
@@ -149,6 +128,3 @@ export async function pickDocument(): Promise<DocumentPickerAsset | null> {
   return result.assets[0];
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}

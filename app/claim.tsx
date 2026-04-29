@@ -17,7 +17,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useSubmitClaim } from '@/hooks/useSubmitClaim';
-import { MOCK_SELECTABLE_CLAIM_PATIENTS, type ClaimPatientOption } from '@/services/claimService';
+import type { ClaimPatientOption } from '@/services/claimService';
 import { pickDocument } from '@/services/uploadService';
 import {
   type VisitClaimDraft,
@@ -49,13 +49,7 @@ function mergePatientOptions(
     });
     seen.add(active.id);
   }
-  for (const p of MOCK_SELECTABLE_CLAIM_PATIENTS) {
-    if (!seen.has(p.id)) {
-      out.push(p);
-      seen.add(p.id);
-    }
-  }
-  return out.length ? out : [...MOCK_SELECTABLE_CLAIM_PATIENTS];
+  return out;
 }
 
 function AttachmentRow({
@@ -299,6 +293,11 @@ export default function ClaimSubmissionScreen() {
                   />
                 ))}
               </Menu>
+              {patientOptions.length === 0 ? (
+                <HelperText type="error" visible>
+                  Data not found. Select a patient from Patient Intake first.
+                </HelperText>
+              ) : null}
             </Card.Content>
           </Card>
 

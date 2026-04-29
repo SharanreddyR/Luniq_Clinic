@@ -14,42 +14,11 @@ export type UpdateAvailabilityPayload = {
   available: boolean;
 };
 
-const MOCK_DOCTORS_SEED: Doctor[] = [
-  {
-    id: 1,
-    name: 'Dr. Priya Sharma',
-    department: 'General',
-    available: true,
-    timing: 'Mon–Fri · 9:00 AM – 1:00 PM',
-  },
-  {
-    id: 2,
-    name: 'Dr. James Chen',
-    department: 'Cardiology',
-    available: true,
-    timing: 'Mon–Wed · 10:00 AM – 4:00 PM',
-  },
-  {
-    id: 3,
-    name: 'Dr. Maria Garcia',
-    department: 'Orthopedics',
-    available: false,
-    timing: 'Tue–Sat · 8:00 AM – 12:00 PM',
-  },
-];
-
-let mockDoctorStore: Doctor[] | null = null;
-
-function cloneMockDoctors(): Doctor[] {
-  return MOCK_DOCTORS_SEED.map((d) => ({ ...d }));
-}
-
-function getMockDoctorStore(): Doctor[] {
-  if (!mockDoctorStore) {
-    mockDoctorStore = cloneMockDoctors();
-  }
-  return mockDoctorStore;
-}
+const DOCTOR_LIST_ENDPOINTS = [
+  '/admin/doctors',
+  '/clinic/doctors',
+  '/doctors',
+] as const;
 
 function mapDoctorRow(raw: unknown): Doctor | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -62,6 +31,8 @@ function mapDoctorRow(raw: unknown): Doctor | null {
       ? o.department
       : typeof o.dept === 'string'
         ? o.dept
+        : typeof o.specialization === 'string'
+          ? o.specialization
         : '';
   const timingRaw =
     typeof o.timing === 'string'
@@ -70,17 +41,34 @@ function mapDoctorRow(raw: unknown): Doctor | null {
         ? o.timeSlots
         : typeof o.slots === 'string'
           ? o.slots
+          : typeof o.qualification === 'string'
+            ? o.qualification
           : '';
+  const status =
+    typeof o.status === 'string' ? o.status.toLowerCase().trim() : '';
+  const available =
+    typeof o.is_available === 'boolean'
+      ? o.is_available
+      : typeof o.available === 'boolean'
+        ? o.available
+        : status === 'available';
   return {
     id,
     name,
     department: departmentRaw.trim() || 'General',
-    available: Boolean(o.available),
+    available,
     timing: timingRaw.trim() || '—',
   };
 }
 
 function normalizeDoctorsResponse(data: unknown): Doctor[] | null {
+  if (
+    data &&
+    typeof data === 'object' &&
+    'data' in data
+  ) {
+    return normalizeDoctorsResponse((data as { data: unknown }).data);
+  }
   if (Array.isArray(data)) {
     const list = data
       .map(mapDoctorRow)
@@ -106,40 +94,18 @@ function normalizeDoctorsResponse(data: unknown): Doctor[] | null {
  * GET /doctors
  */
 export async function fetchDoctors(): Promise<Doctor[]> {
-  try {
-    const { data } = await api.get<unknown>('/doctors');
-    const list = normalizeDoctorsResponse(data);
-    if (!list?.length) {
-      throw new Error('No doctors in response');
+  for (const endpoint of DOCTOR_LIST_ENDPOINTS) {
+    try {
+      const { data } = await api.get<unknown>(endpoint);
+      const list = normalizeDoctorsResponse(data);
+      if (list?.length) {
+        return list;
+      }
+    } catch {
+      // Try next endpoint fallback.
     }
-    return list;
-  } catch {
-    await delay(450);
-    return getMockDoctorStore();
   }
-}
-
-function mockDoctorsByDepartment(department: string): Doctor[] {
-  const dept = department.trim() || 'General';
-  if (dept === 'General') {
-    return getMockDoctorStore().map((d) => ({ ...d }));
-  }
-  return [
-    {
-      id: 101,
-      name: `Dr. ${dept} — Lead`,
-      department: dept,
-      available: true,
-      timing: 'OPD · Mon–Sat',
-    },
-    {
-      id: 102,
-      name: `Dr. ${dept} — Associate`,
-      department: dept,
-      available: true,
-      timing: 'OPD · Tue–Fri',
-    },
-  ];
+  return [];
 }
 
 /**
@@ -153,19 +119,20 @@ export async function fetchDoctorsByDepartment(
     return [];
   }
 
-  try {
-    const { data } = await api.get<unknown>('/doctors', {
-      params: { department: dept },
-    });
-    const list = normalizeDoctorsResponse(data);
-    if (!list?.length) {
-      throw new Error('No doctors in response');
+  for (const endpoint of DOCTOR_LIST_ENDPOINTS) {
+    try {
+      const { data } = await api.get<unknown>(endpoint, {
+        params: { department: dept },
+      });
+      const list = normalizeDoctorsResponse(data);
+      if (list?.length) {
+        return list;
+      }
+    } catch {
+      // Try next endpoint fallback.
     }
-    return list;
-  } catch {
-    await delay(400);
-    return mockDoctorsByDepartment(dept);
   }
+  return [];
 }
 
 /**
@@ -174,18 +141,32 @@ export async function fetchDoctorsByDepartment(
 export async function updateDoctorAvailability(
   payload: UpdateAvailabilityPayload,
 ): Promise<void> {
-  try {
-    await api.post('/update-availability', payload);
-  } catch {
-    await delay(400);
-    const list = getMockDoctorStore();
-    const doc = list.find((d) => d.id === payload.doctorId);
-    if (doc) {
-      doc.available = payload.available;
+  const status = payload.available ? 'available' : 'unavailable';
+  const candidates: Array<() => Promise<unknown>> = [
+    () =>
+      api.put(`/admin/doctors/${payload.doctorId}/status`, {
+        status,
+      }),
+    () =>
+      api.put(`/clinic/doctors/${payload.doctorId}/status`, {
+        status,
+      }),
+    () =>
+      api.patch(`/admin/doctors/${payload.doctorId}`, {
+        available: payload.available,
+      }),
+    () =>
+      api.post('/update-availability', payload),
+  ];
+
+  for (const call of candidates) {
+    try {
+      await call();
+      return;
+    } catch {
+      // Try next endpoint fallback.
     }
   }
+  throw new Error('Could not update doctor availability.');
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}

@@ -1,12 +1,48 @@
-/**
- * Replace with your clinic API base URL.
- * Example: https://api.yourclinic.com/v1
- */
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://api.example.com/v1';
+/** Display name (wordmark splits on spaces). Override with `EXPO_PUBLIC_APP_NAME`. */
+export const APP_NAME =
+  String(process.env.EXPO_PUBLIC_APP_NAME ?? '').trim() || 'Luniq Clinic';
 
-export const APP_NAME = 'Clinic App';
-
-/** Receives visit PDF for admin approval (set EXPO_PUBLIC_ADMIN_CLAIM_EMAIL in env). */
+/** Recipient for admin visit-approval mail. Override with `EXPO_PUBLIC_ADMIN_CLAIM_APPROVAL_EMAIL`. */
 export const ADMIN_CLAIM_APPROVAL_EMAIL =
-  process.env.EXPO_PUBLIC_ADMIN_CLAIM_EMAIL ?? 'claims-admin@example.com';
+  String(process.env.EXPO_PUBLIC_ADMIN_CLAIM_APPROVAL_EMAIL ?? '').trim() ||
+  'approvals@luniqhealth.com';
+
+/**
+ * Laravel JSON API base (`routes/api.php` + `v1` prefix).
+ * Resolves to `…/api/v1` so paths like `/auth/login` match the backend.
+ */
+const DEFAULT_API_BASE_URL = 'https://card.luniqhealth.com/api/v1';
+
+function ensureApiBaseUrl(raw: string | undefined | null): string {
+  const trimmed = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!trimmed) {
+    return DEFAULT_API_BASE_URL;
+  }
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const u = new URL(withProtocol);
+    let path = u.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/' || path === '') {
+      return `${u.origin}/api/v1`;
+    }
+    // Env often uses `…/api` without `/v1` — backend expects `/api/v1/*`
+    if (path === '/api') {
+      return `${u.origin}/api/v1`;
+    }
+    return `${u.origin}${path}`;
+  } catch {
+    return DEFAULT_API_BASE_URL;
+  }
+}
+
+function resolveApiBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (fromEnv && String(fromEnv).trim()) {
+    return ensureApiBaseUrl(String(fromEnv));
+  }
+  return ensureApiBaseUrl(DEFAULT_API_BASE_URL);
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();

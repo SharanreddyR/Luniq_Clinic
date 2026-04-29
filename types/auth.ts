@@ -26,3 +26,33 @@ export type ClinicLoginResponse = {
   token: string;
   clinic: Clinic;
 };
+
+/** Laravel `UserResource` shape from POST /auth/login (`data.user`). */
+export type ApiAuthUser = {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  clinic_profile?: {
+    clinic_name: string;
+    license_number?: string | null;
+    is_verified?: boolean;
+    city?: string | null;
+  } | null;
+};
+
+export type LoginApiEnvelope = {
+  success: boolean;
+  message?: string;
+  data?: {
+    user: ApiAuthUser;
+    token: string;
+    has_purchased_card?: boolean;
+  };
+};
+
+/** Result of POST /auth/login mapped for the app session store. */
+export type LoginResult =
+  | { kind: 'clinic'; token: string; clinic: Clinic }
+  | { kind: 'user'; token: string; user: AuthUser };

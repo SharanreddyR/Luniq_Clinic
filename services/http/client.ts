@@ -21,5 +21,15 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Default `Content-Type: application/json` breaks multipart uploads — Laravel
+  // then sees no `document` file and returns "must be a file" / mimes errors.
+  if (config.data instanceof FormData) {
+    const h = config.headers;
+    if (h && typeof (h as { delete?: (k: string) => void }).delete === 'function') {
+      (h as { delete: (k: string) => void }).delete('Content-Type');
+    } else if (h && typeof h === 'object') {
+      delete (h as Record<string, unknown>)['Content-Type'];
+    }
+  }
   return config;
 });

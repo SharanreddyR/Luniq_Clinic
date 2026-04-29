@@ -1,12 +1,24 @@
-export type PatientCardType = 'Individual' | 'Family' | 'Couple' | 'Child';
+export type PatientCardType =
+  | 'Individual'
+  | 'Family'
+  | 'Couple'
+  | 'Child'
+  | string;
 
 export type PatientMember = {
+  id?: number;
+  personId?: number;
+  unifiedId?: string;
   name: string;
   photo: string;
   mobile: string;
+  relation?: string;
+  isPrimary?: boolean;
+  age?: number | null;
+  gender?: string | null;
 };
 
-/** GET /patient/:cardNumber */
+/** GET /clinic/card/lookup?card_number=... */
 export type PatientRecord = {
   id: number;
   name: string;
@@ -14,6 +26,13 @@ export type PatientRecord = {
   cardNumber: string;
   mobile?: string;
   cardType?: PatientCardType;
+  status?: string;
+  isValid?: boolean;
+  purchasedAt?: string | null;
+  expiresAt?: string | null;
+  amountPaid?: string | null;
+  planType?: string;
+  benefits?: string[];
   /** For Family / Couple / Child cards — linked people */
   members?: PatientMember[];
 };

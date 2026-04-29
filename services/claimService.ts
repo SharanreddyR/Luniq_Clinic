@@ -23,12 +23,6 @@ export type ClaimPatientOption = {
 };
 
 /** Demo roster for “Select patient”; active patient from lookup is merged in the screen */
-export const MOCK_SELECTABLE_CLAIM_PATIENTS: ClaimPatientOption[] = [
-  { id: 201, name: 'Ravi Kumar', cardNumber: 'PC-88421' },
-  { id: 202, name: 'Anita Desai', cardNumber: 'PC-90211' },
-  { id: 203, name: 'Leo Martinez', cardNumber: 'PC-77102' },
-];
-
 export type ClaimSubmissionPayload = {
   patientId: number;
   patientName: string;
@@ -49,13 +43,8 @@ function claimUploadUrl(): string {
   return `${base}/claim`;
 }
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Submit insurance claim — POST /claim (multipart: patient fields + optional files).
- * Mock: `{ claimId: "CLM123", status: "submitted" }` when the request fails.
  */
 export async function submitClaim(
   payload: ClaimSubmissionPayload,
@@ -97,34 +86,29 @@ export async function submitClaim(
     (headers as Record<string, string>).Authorization = `Bearer ${token}`;
   }
 
-  try {
-    const res = await fetch(claimUploadUrl(), {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+  const res = await fetch(claimUploadUrl(), {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
 
-    if (!res.ok) {
-      throw new Error(`Claim failed (${res.status})`);
-    }
-
-    const data = (await res.json()) as Partial<ClaimSubmissionResponse>;
-    const claimId =
-      data.claimId != null && String(data.claimId).length > 0
-        ? String(data.claimId)
-        : 'CLM123';
-    return {
-      claimId,
-      status: data.status ?? 'submitted',
-      message: data.message,
-    };
-  } catch {
-    await delay(700);
-    return {
-      claimId: 'CLM123',
-      status: 'submitted',
-    };
+  if (!res.ok) {
+    throw new Error(`Claim failed (${res.status})`);
   }
+
+  const data = (await res.json()) as Partial<ClaimSubmissionResponse>;
+  const claimId =
+    data.claimId != null && String(data.claimId).length > 0
+      ? String(data.claimId)
+      : '';
+  if (!claimId) {
+    throw new Error('Claim response missing claim ID.');
+  }
+  return {
+    claimId,
+    status: data.status ?? 'submitted',
+    message: data.message,
+  };
 }
 
 /** Canonical claim status for UI (matches GET /claim-status values we support). */
@@ -179,16 +163,6 @@ export function normalizeClaimLifecycleStatus(
   return 'verifying';
 }
 
-function mockLifecycleFromClaimId(claimId: string): ClaimLifecycleStatus {
-  const u = claimId.trim().toUpperCase();
-  if (u.includes('REJ') || u.includes('DENY')) return 'rejected';
-  if (u.includes('APR') || u.includes('OK') || u.endsWith('9')) {
-    return 'approved';
-  }
-  if (u === 'CLM123' || u.includes('VER')) return 'verifying';
-  return 'submitted';
-}
-
 function withLifecycle(
   data: ClaimStatusResponse,
   claimId: string | null,
@@ -221,28 +195,8 @@ export async function fetchClaimStatus(
 
   const id = claimId.trim();
 
-  try {
-    const { data } = await api.get<ClaimStatusResponse>('/claim-status', {
-      params: { claimId: id },
-    });
-    return withLifecycle(data, id);
-  } catch {
-    await delay(450);
-    const lifecycle = mockLifecycleFromClaimId(id);
-    return withLifecycle(
-      {
-        status: CLAIM_LIFECYCLE_LABELS[lifecycle],
-        claimId: id,
-        message:
-          lifecycle === 'rejected'
-            ? 'This claim was not approved under the current policy review.'
-            : lifecycle === 'approved'
-              ? 'Payment processing will follow insurer timelines.'
-              : lifecycle === 'verifying'
-                ? 'Documents are with the verification team.'
-                : 'We have received your submission.',
-      },
-      id,
-    );
-  }
+  const { data } = await api.get<ClaimStatusResponse>('/claim-status', {
+    params: { claimId: id },
+  });
+  return withLifecycle(data, id);
 }

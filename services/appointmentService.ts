@@ -11,83 +11,6 @@ export type Appointment = {
   status: AppointmentStatus;
 };
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-let mockAppointmentStore: Appointment[] | null = null;
-
-function atLocalToday(hour: number, minute = 0): string {
-  const d = new Date();
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
-}
-
-function atLocalDayOffset(
-  dayOffset: number,
-  hour: number,
-  minute = 0,
-): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dayOffset);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
-}
-
-function buildSeedAppointments(): Appointment[] {
-  return [
-    {
-      id: 'apt-1',
-      patientName: 'Ravi Kumar',
-      doctorName: 'Dr. Priya Sharma',
-      startsAt: atLocalToday(9, 30),
-      status: 'pending',
-    },
-    {
-      id: 'apt-2',
-      patientName: 'Anita Desai',
-      doctorName: 'Dr. James Chen',
-      startsAt: atLocalToday(14, 0),
-      status: 'pending',
-    },
-    {
-      id: 'apt-3',
-      patientName: 'Leo Martinez',
-      doctorName: 'Dr. Maria Garcia',
-      startsAt: atLocalToday(11, 15),
-      status: 'completed',
-    },
-    {
-      id: 'apt-4',
-      patientName: 'Sofia Khan',
-      doctorName: 'Dr. Priya Sharma',
-      startsAt: atLocalDayOffset(1, 10, 0),
-      status: 'pending',
-    },
-    {
-      id: 'apt-5',
-      patientName: 'James Okafor',
-      doctorName: 'Dr. James Chen',
-      startsAt: atLocalDayOffset(2, 15, 30),
-      status: 'pending',
-    },
-    {
-      id: 'apt-6',
-      patientName: 'Mei Lin',
-      doctorName: 'Dr. Maria Garcia',
-      startsAt: atLocalDayOffset(5, 9, 0),
-      status: 'pending',
-    },
-  ];
-}
-
-function getMockAppointmentStore(): Appointment[] {
-  if (!mockAppointmentStore) {
-    mockAppointmentStore = buildSeedAppointments();
-  }
-  return mockAppointmentStore;
-}
-
 function mapAppointmentRow(raw: unknown): Appointment | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -196,31 +119,17 @@ export function partitionAppointmentsByDay(
  * GET /appointments
  */
 export async function fetchAppointments(): Promise<Appointment[]> {
-  try {
-    const { data } = await api.get<unknown>('/appointments');
-    const list = normalizeAppointmentsResponse(data);
-    if (!list?.length) {
-      throw new Error('No appointments in response');
-    }
-    return list;
-  } catch {
-    await delay(450);
-    return getMockAppointmentStore().map((a) => ({ ...a }));
+  const { data } = await api.get<unknown>('/appointments');
+  const list = normalizeAppointmentsResponse(data);
+  if (!list?.length) {
+    throw new Error('No appointments in response.');
   }
+  return list;
 }
 
 /**
- * Mark visit completed (optional PATCH; mock updates local store on failure).
+ * Mark visit completed.
  */
 export async function markAppointmentCompleted(id: string): Promise<void> {
-  try {
-    await api.patch(`/appointments/${id}`, { status: 'completed' });
-  } catch {
-    await delay(350);
-    const list = getMockAppointmentStore();
-    const row = list.find((a) => a.id === id);
-    if (row) {
-      row.status = 'completed';
-    }
-  }
+  await api.patch(`/appointments/${id}`, { status: 'completed' });
 }

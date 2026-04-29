@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -40,11 +39,6 @@ export default function DoctorAvailabilityScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader title="Doctor availability" />
-
-      <Text variant="bodyMedium" style={styles.intro}>
-        Roster from GET /doctors. Toggle updates POST /update-availability. Pull
-        down to refresh.
-      </Text>
 
       {doctorsQuery.isPending && !doctorsQuery.data ? (
         <View style={styles.centered}>
@@ -108,7 +102,7 @@ export default function DoctorAvailabilityScreen() {
           )}
           ListEmptyComponent={
             <Text variant="bodyMedium" style={styles.empty}>
-              No doctors returned.
+              Data not found.
             </Text>
           }
         />

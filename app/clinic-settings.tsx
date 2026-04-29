@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -21,6 +21,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
+import { useClinicTimingQuery } from '@/hooks/useClinicTimingQuery';
 import { useSaveClinicTiming } from '@/hooks/useSaveClinicTiming';
 import { useClinicSettingsStore } from '@/store';
 
@@ -47,9 +48,23 @@ export default function ClinicSettingsScreen() {
   const setOpenTime = useClinicSettingsStore((s) => s.setOpenTime);
   const setCloseTime = useClinicSettingsStore((s) => s.setCloseTime);
   const setIsOpen = useClinicSettingsStore((s) => s.setIsOpen);
+  const setTiming = useClinicSettingsStore((s) => s.setTiming);
 
   const saveTiming = useSaveClinicTiming();
+  const timingQuery = useClinicTimingQuery();
   const { showSuccess, showError } = useAppToast();
+  const hydratedFromServer = useRef(false);
+
+  useEffect(() => {
+    if (timingQuery.data && !hydratedFromServer.current) {
+      hydratedFromServer.current = true;
+      setTiming(
+        normalizeHm(timingQuery.data.openTime),
+        normalizeHm(timingQuery.data.closeTime),
+        timingQuery.data.isOpen,
+      );
+    }
+  }, [timingQuery.data, setTiming]);
 
   const openOk = isValidHm(openTime);
   const closeOk = isValidHm(closeTime);
@@ -93,9 +108,14 @@ export default function ClinicSettingsScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <Text variant="bodyMedium" style={styles.intro}>
-            Hours and open/closed status are saved on this device and posted to
-            POST /clinic-timing when you tap Save.
+            Hours and open/closed status sync from clinic/admin timing routes
+            and save back to the server when you tap Save.
           </Text>
+          {!timingQuery.isFetching && !timingQuery.data ? (
+            <Text variant="bodySmall" style={styles.notFoundText}>
+              Data not found.
+            </Text>
+          ) : null}
 
           <Card style={[clinicScreen.card, styles.card]} mode="elevated">
             <Card.Content>
@@ -195,6 +215,11 @@ const styles = StyleSheet.create({
   intro: {
     ...typography.subtitle,
     marginBottom: spacing.lg,
+  },
+  notFoundText: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
   },
   card: {
     marginBottom: 0,

@@ -1,111 +1,105 @@
+import { isAxiosError } from 'axios';
+
 import { api } from '@/services/http';
-import type { ClinicLoginResponse } from '@/types/auth';
+import type {
+  ApiAuthUser,
+  AuthUser,
+  Clinic,
+  ClinicLoginResponse,
+  LoginApiEnvelope,
+  LoginResult,
+} from '@/types/auth';
 
 export type {
   AuthUser,
   AuthResponse,
   Clinic,
   ClinicLoginResponse,
+  LoginResult,
 } from '@/types/auth';
-
-/** Mock when POST /clinic-login is unavailable — matches contract for demos. */
-export const MOCK_CLINIC_LOGIN_RESPONSE: ClinicLoginResponse = {
-  token: 'clinic_token_123',
-  clinic: {
-    id: 1,
-    name: 'Luniq Partner Clinic',
-    contactName: 'Dr. Sample',
-    phone: '+1 (555) 010-0000',
-  },
-};
 
 export type ClinicLoginPayload = {
   phoneOrEmail: string;
   password: string;
 };
 
-export type RegisterClinicPayload = {
-  /** Primary contact / admin name */
-  name: string;
-  email: string;
-  password: string;
-  clinicName: string;
-  clinicAddress: string;
-};
+function mapApiUserToAuthUser(u: ApiAuthUser): AuthUser {
+  return {
+    id: String(u.id),
+    name: u.name,
+    email: u.email ?? '',
+    phone: u.phone ?? undefined,
+  };
+}
+
+function mapClinicFromApiUser(u: ApiAuthUser): Clinic {
+  const cp = u.clinic_profile;
+  return {
+    id: u.id,
+    name: cp?.clinic_name ?? u.name,
+    contactName: u.name,
+    phone: u.phone ?? undefined,
+    address: cp?.city ? String(cp.city) : undefined,
+  };
+}
+
+function loginErrorMessage(err: unknown): string {
+  if (isAxiosError(err)) {
+    const body = err.response?.data as {
+      message?: string;
+      errors?: Record<string, string[]>;
+    };
+    if (body?.message && typeof body.message === 'string') {
+      return body.message;
+    }
+    const first =
+      body?.errors &&
+      Object.values(body.errors).find((v) => Array.isArray(v) && v[0])?.[0];
+    if (first) return first;
+    if (err.response?.status === 401 || err.response?.status === 422) {
+      return 'Invalid credentials. Please try again.';
+    }
+    return err.message || 'Sign-in failed. Try again.';
+  }
+  if (err instanceof Error) return err.message;
+  return 'Sign-in failed. Try again.';
+}
 
 /**
- * Clinic staff / portal login — POST /clinic-login
+ * Clinic / patient portal login — POST /auth/login (Laravel API v1).
+ * Body: `{ login: phone or email, password }`.
  */
-export async function clinicLoginRequest(
+export async function loginRequest(
   phoneOrEmail: string,
   password: string,
-): Promise<ClinicLoginResponse> {
-  const trimmed = phoneOrEmail.trim();
+): Promise<LoginResult> {
+  const login = phoneOrEmail.trim();
   try {
-    const { data } = await api.post<ClinicLoginResponse>('/clinic-login', {
-      phoneOrEmail: trimmed,
+    const { data } = await api.post<LoginApiEnvelope>('/auth/login', {
+      login,
       password,
     });
-    return data;
-  } catch {
-    await delay(700);
-    if (!trimmed || !password) {
-      throw new Error('Enter your phone or email and password.');
-    }
-    return MOCK_CLINIC_LOGIN_RESPONSE;
-  }
-}
 
-/**
- * Register clinic + contact — POST /auth/register
- */
-export async function registerRequest(
-  payload: RegisterClinicPayload,
-): Promise<ClinicLoginResponse> {
-  const {
-    name,
-    email,
-    password,
-    clinicName,
-    clinicAddress,
-  } = payload;
+    if (!data.success || !data.data?.token || !data.data?.user) {
+      throw new Error(data.message || 'Login failed.');
+    }
 
-  try {
-    const { data } = await api.post<ClinicLoginResponse>('/auth/register', {
-      name: name.trim(),
-      email: email.trim(),
-      password,
-      clinicName: clinicName.trim(),
-      clinicAddress: clinicAddress.trim(),
-    });
-    return data;
-  } catch {
-    await delay(900);
-    if (
-      !name.trim() ||
-      !email.trim() ||
-      !password ||
-      !clinicName.trim() ||
-      !clinicAddress.trim()
-    ) {
-      throw new Error('Please complete all required fields.');
+    const u = data.data.user;
+
+    if (u.role === 'clinic') {
+      return {
+        kind: 'clinic',
+        token: data.data.token,
+        clinic: mapClinicFromApiUser(u),
+      };
     }
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters.');
-    }
+
     return {
-      token: `clinic_reg_${Date.now()}`,
-      clinic: {
-        id: Math.floor(1000 + Math.random() * 9000),
-        name: clinicName.trim(),
-        address: clinicAddress.trim(),
-        contactName: name.trim(),
-        phone: '+1 (555) 010-0200',
-      },
+      kind: 'user',
+      token: data.data.token,
+      user: mapApiUserToAuthUser(u),
     };
+  } catch (err) {
+    throw new Error(loginErrorMessage(err));
   }
-}
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }

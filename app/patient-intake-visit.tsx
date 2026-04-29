@@ -237,7 +237,7 @@ export default function PatientIntakeVisitScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
 
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [amount, setAmount] = useState('');
+  const [serviceAmounts, setServiceAmounts] = useState<Record<string, string>>({});
   const [symptoms, setSymptoms] = useState('');
 
   const [assets, setAssets] = useState<
@@ -253,6 +253,11 @@ export default function PatientIntakeVisitScreen() {
   );
   const captureCategoryRef = useRef<UploadCategory | null>(null);
   const [saving, setSaving] = useState(false);
+  const inputFocusProps = {
+    outlineColor: colors.border,
+    activeOutlineColor: colors.primary,
+    selectionColor: colors.primary,
+  } as const;
 
   useEffect(() => {
     captureCategoryRef.current = cameraCategory;
@@ -326,18 +331,41 @@ export default function PatientIntakeVisitScreen() {
   }
 
   function toggleService(name: string) {
-    setSelectedServices((prev) =>
-      prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
-    );
+    setSelectedServices((prev) => {
+      const exists = prev.includes(name);
+      const next = exists ? prev.filter((s) => s !== name) : [...prev, name];
+      if (exists) {
+        setServiceAmounts((curr) => {
+          const copy = { ...curr };
+          delete copy[name];
+          return copy;
+        });
+      }
+      return next;
+    });
+  }
+
+  function setAmountForService(name: string, raw: string) {
+    const cleaned = raw.replace(/[^\d.]/g, '');
+    const parts = cleaned.split('.');
+    const normalized =
+      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join('')}`;
+    setServiceAmounts((prev) => ({ ...prev, [name]: normalized }));
   }
 
   const showCamera = Platform.OS !== 'web';
+
+  const totalAmount = useMemo(() => {
+    return selectedServices.reduce((sum, service) => {
+      const n = Number(serviceAmounts[service] ?? '0');
+      return Number.isFinite(n) ? sum + n : sum;
+    }, 0);
+  }, [selectedServices, serviceAmounts]);
 
   const canComplete =
     !!activePatient &&
     !!selectedDoctor &&
     selectedServices.length > 0 &&
-    amount.trim().length > 0 &&
     !saving;
 
   async function onCompleteVisit() {
@@ -346,7 +374,7 @@ export default function PatientIntakeVisitScreen() {
     try {
       const slipId = `VIS-${Date.now().toString(36).toUpperCase()}`;
       const clinicName = clinic?.name?.trim() || 'Clinic';
-      const amountStr = amount.trim();
+      const amountStr = totalAmount.toFixed(2);
       const services = [...selectedServices];
       const symptomsStr = symptoms.trim();
 
@@ -541,7 +569,7 @@ export default function PatientIntakeVisitScreen() {
                 Services
               </Text>
               <Text variant="bodySmall" style={styles.muted}>
-                Tap to add or remove.
+                Tap to add or remove. Enter amount for each selected service.
               </Text>
               <View style={styles.chipWrap}>
                 {DEFAULT_VISIT_SERVICES.map((name) => (
@@ -568,28 +596,52 @@ export default function PatientIntakeVisitScreen() {
                   Select at least one service to continue.
                 </HelperText>
               ) : null}
+              {selectedServices.length > 0 ? (
+                <View style={styles.serviceBillingBlock}>
+                  <Text variant="labelLarge" style={styles.fieldLabel}>
+                    Service billing
+                  </Text>
+                  {selectedServices.map((service) => (
+                    <View key={service} style={styles.serviceAmountRow}>
+                      <Text variant="bodyMedium" style={styles.serviceAmountLabel}>
+                        {service}
+                      </Text>
+                      <TextInput
+                        label="Amount (₹)"
+                        value={serviceAmounts[service] ?? ''}
+                        onChangeText={(v) => setAmountForService(service, v)}
+                        mode="outlined"
+                        {...inputFocusProps}
+                        keyboardType="decimal-pad"
+                        style={styles.serviceAmountInput}
+                        disabled={saving}
+                      />
+                    </View>
+                  ))}
+                  <View style={styles.totalRow}>
+                    <Text variant="titleSmall" style={styles.totalLabel}>
+                      Total
+                    </Text>
+                    <Text variant="titleSmall" style={styles.totalValue}>
+                      ₹ {totalAmount.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </Card.Content>
           </Card>
 
           <Card style={[clinicScreen.card, styles.card, styles.sectionCard]} mode="elevated">
             <Card.Content>
               <Text variant="titleMedium" style={styles.cardTitle}>
-                Billing &amp; notes
+                Visit notes
               </Text>
-              <TextInput
-                label="Amount (₹)"
-                value={amount}
-                onChangeText={setAmount}
-                mode="outlined"
-                keyboardType="decimal-pad"
-                style={styles.input}
-                disabled={saving}
-              />
               <TextInput
                 label="Chief complaint / visit notes"
                 value={symptoms}
                 onChangeText={setSymptoms}
                 mode="outlined"
+                {...inputFocusProps}
                 multiline
                 numberOfLines={4}
                 style={styles.input}
@@ -730,6 +782,41 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: colors.primary },
   chipText: { color: colors.secondary },
   chipTextSelected: { color: colors.onPrimary, fontWeight: '600' },
+  serviceBillingBlock: {
+    marginTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  serviceAmountRow: {
+    marginBottom: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  serviceAmountLabel: {
+    color: colors.secondary,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  serviceAmountInput: {
+    backgroundColor: colors.surface,
+  },
+  totalRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    color: colors.textMuted,
+  },
+  totalValue: {
+    color: colors.secondary,
+    fontWeight: '700',
+  },
   completeCta: { marginTop: spacing.sm, borderRadius: radii.button },
   input: { marginBottom: spacing.md, backgroundColor: colors.surface },
   errorText: { color: colors.error, marginBottom: spacing.sm },

@@ -1,4 +1,5 @@
 import { api } from '@/services/http';
+import { isAxiosError } from 'axios';
 import type {
   PatientCardType,
   PatientMember,
@@ -7,92 +8,91 @@ import type {
 
 export type { PatientRecord, PatientMember, PatientCardType } from '@/types/patient';
 
-const MOCK_BASE: Omit<PatientRecord, 'cardNumber' | 'cardType' | 'members'> = {
-  id: 101,
-  name: 'Rahul Kumar',
-  photo: 'https://via.placeholder.com/150',
+type ApiLookupMember = {
+  id?: number;
+  person_id?: number;
+  unified_id?: string;
+  name?: string;
+  relation?: string;
+  is_primary?: boolean;
+  age?: number;
+  gender?: string;
+  photo?: string;
+  photo_url?: string;
 };
 
-function sampleMembers(cardType: PatientCardType): PatientMember[] {
-  if (cardType === 'Family') {
-    return [
-      {
-        name: 'Priya Kumar',
-        photo: `https://via.placeholder.com/150/2ebdb4/ffffff?text=P1`,
-        mobile: '+91 98765 11101',
-      },
-      {
-        name: 'Aarav Kumar',
-        photo: `https://via.placeholder.com/150/062d2f/ffffff?text=P2`,
-        mobile: '+91 98765 11102',
-      },
-      {
-        name: 'Ananya Kumar',
-        photo: `https://via.placeholder.com/150/5a726f/ffffff?text=P3`,
-        mobile: '+91 98765 11103',
-      },
-    ];
-  }
-  if (cardType === 'Couple') {
-    return [
-      {
-        name: 'Sneha Kumar',
-        photo: `https://via.placeholder.com/150/2ebdb4/ffffff?text=C1`,
-        mobile: '+91 98765 22201',
-      },
-      {
-        name: 'Rahul Kumar',
-        photo: `https://via.placeholder.com/150/062d2f/ffffff?text=C2`,
-        mobile: '+91 98765 22202',
-      },
-    ];
-  }
-  // Child plan — linked children / dependents
-  return [
-    {
-      name: 'Riya Kumar',
-      photo: `https://via.placeholder.com/150/2ebdb4/ffffff?text=CH1`,
-      mobile: '+91 98765 33301',
-    },
-    {
-      name: 'Vihaan Kumar',
-      photo: `https://via.placeholder.com/150/062d2f/ffffff?text=CH2`,
-      mobile: '+91 98765 33302',
-    },
-  ];
+type ApiLookupData = {
+  card_number?: string;
+  status?: string;
+  is_valid?: boolean;
+  purchased_at?: string;
+  expires_at?: string;
+  amount_paid?: string;
+  card_type?: string;
+  plan_type?: string;
+  benefits?: string[];
+  members?: ApiLookupMember[];
+};
+
+function mapLookupMember(m: ApiLookupMember): PatientMember | null {
+  const name = typeof m.name === 'string' ? m.name.trim() : '';
+  if (!name) return null;
+  const photo =
+    (typeof m.photo_url === 'string' && m.photo_url.trim()) ||
+    (typeof m.photo === 'string' && m.photo.trim()) ||
+    'https://via.placeholder.com/150';
+  return {
+    id: typeof m.id === 'number' ? m.id : undefined,
+    personId: typeof m.person_id === 'number' ? m.person_id : undefined,
+    unifiedId: typeof m.unified_id === 'string' ? m.unified_id : undefined,
+    name,
+    photo,
+    mobile:
+      (typeof m.unified_id === 'string' && m.unified_id.trim()) ||
+      (typeof m.relation === 'string' && m.relation.trim()) ||
+      '—',
+    relation: typeof m.relation === 'string' ? m.relation : undefined,
+    isPrimary: typeof m.is_primary === 'boolean' ? m.is_primary : undefined,
+    age: typeof m.age === 'number' ? m.age : null,
+    gender: typeof m.gender === 'string' ? m.gender : null,
+  };
 }
 
-function resolveCardType(cardNumber: string): PatientCardType {
-  const u = cardNumber.toUpperCase();
-  if (u.includes('FAMILY')) return 'Family';
-  if (u.includes('COUPLE')) return 'Couple';
-  if (u.includes('CHILD')) return 'Child';
-  return 'Individual';
-}
+function normalizeLookupResponse(data: ApiLookupData): PatientRecord {
+  const members = Array.isArray(data.members)
+    ? data.members
+        .map(mapLookupMember)
+        .filter((m): m is PatientMember => m != null)
+    : [];
 
-/** Demo GET response — use card number hints: FAMILY, COUPLE, CHILD in the string */
-export function mockPatientRecord(cardNumber: string): PatientRecord {
-  const trimmed = cardNumber.trim();
-  const upper = trimmed.toUpperCase();
-  const cardType = resolveCardType(upper);
-  const displayCard = trimmed ? upper : 'LQ12345';
-
-  if (cardType === 'Individual') {
-    return {
-      ...MOCK_BASE,
-      cardNumber: displayCard,
-      mobile: '+91 98765 43210',
-      cardType: 'Individual',
-      members: [],
-    };
+  const primary =
+    members.find((m) => m.isPrimary) ??
+    members[0];
+  if (!primary) {
+    throw new Error('Invalid patient response.');
   }
 
   return {
-    ...MOCK_BASE,
-    cardNumber: displayCard,
-    mobile: '+91 98765 43210',
-    cardType,
-    members: sampleMembers(cardType),
+    id: primary.personId ?? primary.id ?? 0,
+    name: primary.name,
+    photo: primary.photo,
+    cardNumber:
+      typeof data.card_number === 'string' ? data.card_number : '',
+    mobile: primary.mobile,
+    cardType:
+      typeof data.card_type === 'string' ? data.card_type : undefined,
+    status: typeof data.status === 'string' ? data.status : undefined,
+    isValid: typeof data.is_valid === 'boolean' ? data.is_valid : undefined,
+    purchasedAt:
+      typeof data.purchased_at === 'string' ? data.purchased_at : null,
+    expiresAt:
+      typeof data.expires_at === 'string' ? data.expires_at : null,
+    amountPaid:
+      typeof data.amount_paid === 'string' ? data.amount_paid : null,
+    planType:
+      typeof data.plan_type === 'string' ? data.plan_type : undefined,
+    benefits: Array.isArray(data.benefits) ? data.benefits : [],
+    members,
   };
 }
 
@@ -104,27 +104,39 @@ export async function fetchPatientByCardNumber(
     throw new Error('Enter a card number.');
   }
 
-  const path = `/patient/${encodeURIComponent(trimmed)}`;
-
   try {
-    const { data } = await api.get<PatientRecord & { photoUrl?: string }>(path);
-    if (data == null || typeof data.id !== 'number' || !data.name || !data.cardNumber) {
+    const { data } = await api.get<{ success?: boolean; data?: ApiLookupData }>(
+      '/clinic/card/lookup',
+      { params: { card_number: trimmed } },
+    );
+    if (!data?.success || !data.data) {
       throw new Error('Invalid patient response.');
     }
-    const photo = data.photo ?? data.photoUrl;
-    if (!photo) {
+    const mapped = normalizeLookupResponse(data.data);
+    if (!mapped.cardNumber || !mapped.id) {
       throw new Error('Invalid patient response.');
     }
-    return {
-      ...data,
-      photo,
-    };
-  } catch {
-    await delay(550);
-    return mockPatientRecord(trimmed);
+    return mapped;
+  } catch (err) {
+    if (isAxiosError(err)) {
+      const status = err.response?.status;
+      const body = err.response?.data as
+        | { message?: string; errors?: Record<string, string[]> }
+        | undefined;
+      if (status === 404) {
+        throw new Error('Card not found.');
+      }
+      const first =
+        body?.errors &&
+        Object.values(body.errors).find((v) => Array.isArray(v) && v[0])?.[0];
+      if (first) {
+        throw new Error(first);
+      }
+      if (typeof body?.message === 'string' && body.message.trim()) {
+        throw new Error(body.message.trim());
+      }
+      throw new Error(err.message || 'Could not load patient.');
+    }
+    throw err instanceof Error ? err : new Error('Could not load patient.');
   }
-}
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }

@@ -44,33 +44,9 @@ export type OpdSlipResponse = {
 export async function createOpdSlip(
   payload: OpdSlipPayload,
 ): Promise<OpdSlipResponse> {
-  try {
-    const { data } = await api.post<OpdSlipResponse>('/opd', {
-      ...payload,
-      submittedAt: new Date().toISOString(),
-    });
-    return data;
-  } catch {
-    await delay(650);
-    if (!payload.patientName?.trim()) {
-      throw new Error('Patient name is missing.');
-    }
-    if (!payload.department?.trim()) {
-      throw new Error('Select a department.');
-    }
-    if (!payload.doctorId || !payload.doctorName?.trim()) {
-      throw new Error('Select a doctor.');
-    }
-    if (!payload.symptoms?.trim()) {
-      throw new Error('Enter symptoms.');
-    }
-    return {
-      opdId: 'OPD12345',
-      status: 'created',
-    };
-  }
-}
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const { data } = await api.post<OpdSlipResponse>('/opd', {
+    ...payload,
+    submittedAt: new Date().toISOString(),
+  });
+  return data;
 }
