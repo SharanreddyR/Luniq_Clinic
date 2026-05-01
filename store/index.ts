@@ -6,3 +6,4 @@ export {
   useClinicSettingsStore,
 } from './clinicSettingsStore';
 export { usePatientStore } from './patientStore';
+export { useVisitHistoryStore } from './visitHistoryStore';

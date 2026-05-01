@@ -11,13 +11,13 @@
  *
  * Native splash (`app.json`) uses `primary`; Paper/theme consume `colors` only.
  */
-export const HEALTHAPP_PRIMARY = '#2ebdb4' as const;
-export const HEALTHAPP_SECONDARY = '#062d2f' as const;
-export const HEALTHAPP_BACKGROUND = '#f4f9f9' as const;
+export const HEALTHAPP_PRIMARY = '#22B8AE' as const;
+export const HEALTHAPP_SECONDARY = '#0A5257' as const;
+export const HEALTHAPP_BACKGROUND = '#EAF6F4' as const;
 export const HEALTHAPP_ACCENT = '#c4f542' as const;
 
 /** Mid tone for MD3 secondaryContainer / info surfaces */
-const HEALTHAPP_SECONDARY_ELEVATED = '#0d4a4d' as const;
+const HEALTHAPP_SECONDARY_ELEVATED = '#146D70' as const;
 
 export const healthAppColors = {
   primary: HEALTHAPP_PRIMARY,
@@ -29,12 +29,12 @@ export const healthAppColors = {
   background: HEALTHAPP_BACKGROUND,
   surface: '#ffffff',
   /** Subtle fill vs background */
-  surfaceVariant: '#e8f4f4',
+  surfaceVariant: '#DDF1EF',
   onPrimary: '#ffffff',
   onSecondary: '#ffffff',
   text: HEALTHAPP_SECONDARY,
-  textMuted: '#4a6b6d',
-  border: '#c5dedb',
+  textMuted: '#557C7F',
+  border: '#C3E1DD',
   error: '#b3261e',
   success: '#1b7a6c',
 } as const;

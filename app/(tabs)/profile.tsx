@@ -1,25 +1,27 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Avatar,
   Button,
   Card,
+  Dialog,
   List,
+  Portal,
   Text,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 
 import { BrandLogoMark } from '@/components/ClinicLogo';
-import { APP_NAME, clinicScreen, radii, spacing, typography } from '@/constants';
+import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicProfile } from '@/hooks/useClinicProfile';
 import { useAuthStore } from '@/store';
 import { clearAllPersistedAppState } from '@/utils/clearAppPersistence';
 
-const HERO_COLORS = ['#2ebdb4', '#3d9fff', '#1d4ed8'] as const;
+const HERO_COLORS = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const clinicProfileQuery = useClinicProfile();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
 
   const remote = clinicProfileQuery.data;
   const staffName =
@@ -48,11 +51,32 @@ export default function ProfileScreen() {
   const addressLine = [remote?.address, remote?.city, remote?.state, remote?.pincode]
     .filter((x): x is string => Boolean(x && x.trim()))
     .join(', ');
+  const stats = [
+    {
+      key: 'appointments',
+      label: 'Appointments',
+      value: remote ? 'Synced' : 'Pending',
+      icon: 'calendar-check-outline' as const,
+    },
+    {
+      key: 'reports',
+      label: 'Reports',
+      value: remote ? 'Ready' : 'Not linked',
+      icon: 'file-document-check-outline' as const,
+    },
+    {
+      key: 'account',
+      label: 'Account',
+      value: clinicName !== 'Not linked' ? 'Active' : 'Guest',
+      icon: 'shield-check-outline' as const,
+    },
+  ];
 
-  async function onLogout() {
+  async function confirmLogout() {
     setLoggingOut(true);
     try {
       await clearAllPersistedAppState();
+      setLogoutDialogVisible(false);
       router.replace('/login');
     } finally {
       setLoggingOut(false);
@@ -60,6 +84,7 @@ export default function ProfileScreen() {
   }
 
   return (
+    <>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -69,34 +94,77 @@ export default function ProfileScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.hero}>
-          <View style={styles.heroLogoWrap}>
-            <BrandLogoMark size={88} padded />
+          <View style={styles.heroTopBar}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.heroIconChip,
+                pressed && styles.heroIconChipPressed,
+              ]}
+              onPress={() => setLogoutDialogVisible(true)}
+              disabled={loggingOut}
+              accessibilityRole="button"
+              accessibilityLabel="Log out">
+              <MaterialCommunityIcons
+                name="logout"
+                size={22}
+                color={colors.onPrimary}
+              />
+            </Pressable>
+            <View style={styles.heroBrandMark}>
+              <BrandLogoMark size={22} padded />
+            </View>
           </View>
-          <Text variant="headlineSmall" style={styles.heroApp}>
-            {APP_NAME}
-          </Text>
-          <Text variant="bodyLarge" style={styles.heroTag}>
-            .
-          </Text>
+          <View style={styles.heroProfileRow}>
+            <View style={styles.heroAvatarRing}>
+              <Avatar.Text
+                size={84}
+                label={initialsFor(staffName)}
+                style={styles.heroAvatar}
+                labelStyle={styles.heroAvatarLabel}
+              />
+            </View>
+            <View style={styles.heroProfileTexts}>
+              <Text variant="labelLarge" style={styles.heroProfileKicker}>
+                Your profile
+              </Text>
+              <Text variant="headlineSmall" style={styles.heroName} numberOfLines={2}>
+                {staffName}
+              </Text>
+              <Text variant="bodyMedium" style={styles.heroRole}>
+                Signed in as clinic staff
+              </Text>
+              <Text variant="labelMedium" style={styles.heroClinic} numberOfLines={2}>
+                {clinicName}
+              </Text>
+            </View>
+          </View>
         </LinearGradient>
 
         <View style={styles.overlapZone}>
           <Card style={[clinicScreen.card, styles.identityCard]} mode="elevated">
             <Card.Content style={styles.identityInner}>
-              <View style={styles.avatarRing}>
-                <Avatar.Text
-                  size={96}
-                  label={initialsFor(staffName)}
-                  style={styles.avatar}
-                  labelStyle={styles.avatarLabel}
-                />
+              <Text variant="titleMedium" style={styles.overviewTitle}>
+                Overview
+              </Text>
+              <View style={styles.statsRow}>
+                {stats.map((item) => (
+                  <View key={item.key} style={styles.statCard}>
+                    <View style={styles.statIconWrap}>
+                      <MaterialCommunityIcons
+                        name={item.icon}
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <Text variant="labelSmall" style={styles.statLabel}>
+                      {item.label}
+                    </Text>
+                    <Text variant="titleSmall" style={styles.statValue}>
+                      {item.value}
+                    </Text>
+                  </View>
+                ))}
               </View>
-              <Text variant="headlineSmall" style={styles.name} numberOfLines={2}>
-                {staffName}
-              </Text>
-              <Text variant="bodyMedium" style={styles.roleHint}>
-                Signed in as clinic staff
-              </Text>
             </Card.Content>
           </Card>
 
@@ -184,35 +252,103 @@ export default function ProfileScreen() {
             </Card.Content>
           </Card>
 
-          <View style={styles.actions}>
-            <Button
-              mode="outlined"
-              icon="account-edit"
-              onPress={() => {}}
-              disabled
-              style={styles.actionBtn}
-              contentStyle={clinicScreen.buttonContent}>
-              Edit profile
-            </Button>
-            <Text variant="bodySmall" style={styles.editHint}>
-              Updates are managed by your clinic administrator.
-            </Text>
-            <Button
-              mode="contained"
-              icon="logout"
-              onPress={() => void onLogout()}
-              loading={loggingOut}
-              disabled={loggingOut}
-              style={[clinicScreen.button, styles.logoutBtn]}
-              contentStyle={clinicScreen.buttonContent}
-              buttonColor={colors.error}
-              textColor={colors.onPrimary}>
-              Log out
-            </Button>
-          </View>
+          <Card style={[clinicScreen.card, styles.infoCard]} mode="elevated">
+            <Card.Content style={styles.infoCardContent}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Quick actions
+              </Text>
+              <List.Section style={styles.listSection}>
+                <List.Item
+                  title="Appointments"
+                  description="Manage upcoming visits and follow-ups"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => router.push('/appointments' as Href)}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="calendar-month-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                />
+                <List.Item
+                  title="Reports"
+                  description="View and export patient health reports"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => router.push('/reports' as Href)}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="file-chart-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                />
+                <List.Item
+                  title="Settings"
+                  description="Update preferences and security controls"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => router.push('/clinic-settings' as Href)}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="cog-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                />
+              </List.Section>
+            </Card.Content>
+          </Card>
         </View>
       </ScrollView>
     </SafeAreaView>
+
+    <Portal>
+      <Dialog
+        visible={logoutDialogVisible}
+        onDismiss={() => {
+          if (!loggingOut) setLogoutDialogVisible(false);
+        }}
+        dismissable={!loggingOut}
+        style={styles.logoutDialog}>
+        <Dialog.Title>Log out?</Dialog.Title>
+        <Dialog.Content>
+          <Text variant="bodyMedium" style={styles.logoutDialogBody}>
+            You will need to sign in again to access your clinic dashboard.
+          </Text>
+        </Dialog.Content>
+        <Dialog.Actions style={styles.logoutDialogActions}>
+          <Button
+            mode="outlined"
+            onPress={() => setLogoutDialogVisible(false)}
+            disabled={loggingOut}
+            textColor={colors.secondary}
+            style={styles.logoutDialogCancel}>
+            Cancel
+          </Button>
+          <Button
+            mode="contained"
+            onPress={() => void confirmLogout()}
+            loading={loggingOut}
+            disabled={loggingOut}
+            buttonColor={colors.error}
+            textColor={colors.onPrimary}>
+            Log out
+          </Button>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
+    </>
   );
 }
 
@@ -225,30 +361,92 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl * 2,
   },
   hero: {
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl * 2.2,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xl * 2,
     paddingHorizontal: spacing.lg,
-    alignItems: 'center',
     borderBottomLeftRadius: radii.lg,
     borderBottomRightRadius: radii.lg,
   },
-  heroLogoWrap: {
-    marginBottom: spacing.md,
+  heroTopBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    minHeight: 40,
   },
-  heroApp: {
-    color: colors.onPrimary,
+  heroIconChip: {
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 40,
+    minHeight: 40,
+  },
+  heroIconChipPressed: {
+    opacity: 0.88,
+  },
+  heroBrandMark: {
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  heroAvatarRing: {
+    borderRadius: 48,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  heroAvatar: {
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  heroAvatarLabel: {
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: 0.3,
-    textAlign: 'center',
+    color: colors.primary,
   },
-  heroTag: {
+  heroProfileTexts: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroProfileKicker: {
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  heroName: {
     color: colors.onPrimary,
-    opacity: 0.92,
-    marginTop: spacing.xs,
-    textAlign: 'center',
+    fontWeight: '700',
+    lineHeight: 30,
+  },
+  heroRole: {
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 4,
+  },
+  heroClinic: {
+    color: 'rgba(255,255,255,0.82)',
+    marginTop: spacing.sm,
+    fontWeight: '600',
   },
   overlapZone: {
-    marginTop: -56,
+    marginTop: -spacing.lg,
     paddingHorizontal: spacing.lg,
   },
   identityCard: {
@@ -256,35 +454,50 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    elevation: 3,
   },
   identityInner: {
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  avatarRing: {
-    marginBottom: spacing.md,
-    borderRadius: 56,
-    padding: 4,
-    borderWidth: 3,
-    borderColor: colors.primary,
-  },
-  avatar: {
-    backgroundColor: colors.surfaceVariant,
-  },
-  avatarLabel: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: colors.secondary,
-  },
-  name: {
-    textAlign: 'center',
+  overviewTitle: {
     color: colors.secondary,
     fontWeight: '700',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  roleHint: {
-    textAlign: 'center',
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: 0,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  statIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceVariant,
+    marginBottom: spacing.xs / 2,
+  },
+  statLabel: {
     color: colors.textMuted,
+    marginBottom: spacing.xs / 2,
+  },
+  statValue: {
+    color: colors.secondary,
+    fontWeight: '700',
   },
   infoCard: {
     marginBottom: spacing.lg,
@@ -292,10 +505,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 2,
   },
   infoCardContent: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing.sm,
   },
   sectionTitle: {
     ...typography.title,
@@ -345,22 +563,22 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     marginBottom: spacing.xs,
   },
-  actions: {
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+  logoutDialog: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    marginHorizontal: spacing.lg,
   },
-  actionBtn: {
-    borderColor: colors.border,
-    borderRadius: radii.button,
-  },
-  editHint: {
-    textAlign: 'center',
+  logoutDialogBody: {
     color: colors.textMuted,
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.md,
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  logoutBtn: {
-    borderRadius: radii.button,
+  logoutDialogActions: {
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  logoutDialogCancel: {
+    borderColor: colors.border,
   },
 });

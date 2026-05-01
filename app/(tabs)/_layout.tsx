@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { clinicIcons, colors } from '@/constants';
 
 export default function MainTabsLayout() {
   const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 1);
 
   return (
     <Tabs
@@ -14,32 +16,44 @@ export default function MainTabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: 1,
+          marginBottom: 2,
         },
+        tabBarItemStyle: styles.tabItem,
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: bottomInset,
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
-          elevation: 12,
-          shadowColor: '#062d2f',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
-          paddingTop: 8,
-          height: 58 + Math.max(insets.bottom, 8),
-          paddingBottom: Math.max(insets.bottom, 8),
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 6,
+          paddingHorizontal: 8,
+          elevation: 14,
+          shadowColor: '#0a5257',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.14,
+          shadowRadius: 16,
         },
       }}>
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="home"
-              size={clinicIcons.size.md}
-              color={color}
-            />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+              <MaterialCommunityIcons
+                name={focused ? 'home' : 'home-outline'}
+                size={clinicIcons.size.md}
+                color={focused ? colors.primary : color}
+              />
+            </View>
           ),
         }}
       />
@@ -47,15 +61,33 @@ export default function MainTabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={clinicIcons.size.md}
-              color={color}
-            />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+              <MaterialCommunityIcons
+                name={focused ? 'account-circle' : 'account-circle-outline'}
+                size={clinicIcons.size.md}
+                color={focused ? colors.primary : color}
+              />
+            </View>
           ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabItem: {
+    borderRadius: 14,
+  },
+  iconWrap: {
+    width: 34,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  iconWrapActive: {
+    backgroundColor: colors.surfaceVariant,
+  },
+});

@@ -49,15 +49,16 @@ function loginErrorMessage(err: unknown): string {
       message?: string;
       errors?: Record<string, string[]>;
     };
-    if (body?.message && typeof body.message === 'string') {
-      return body.message;
-    }
+    // Laravel ValidationException: prefer field errors over generic "given data was invalid."
     const first =
       body?.errors &&
       Object.values(body.errors).find((v) => Array.isArray(v) && v[0])?.[0];
     if (first) return first;
+    if (body?.message && typeof body.message === 'string') {
+      return body.message;
+    }
     if (err.response?.status === 401 || err.response?.status === 422) {
-      return 'Invalid credentials. Please try again.';
+      return 'Invalid credentials. Retry again.';
     }
     return err.message || 'Sign-in failed. Try again.';
   }

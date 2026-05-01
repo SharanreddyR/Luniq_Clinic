@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import type { ReactNode } from 'react';
+import { forwardRef, useEffect, useState, type ReactNode } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,12 +18,12 @@ import { BrandLogoMark } from '@/components/ClinicLogo';
 import { APP_NAME, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 
-/** Deep blue → teal (royal / clinical, similar to reference). */
-const AUTH_GRADIENT = ['#0a1f33', '#0f3d5c', '#156b8a', '#1a7a8f'] as const;
+/** Teal clinical gradient aligned with app shell. */
+const AUTH_GRADIENT = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
 
 const CARD_TOP_RADIUS = 26;
 
-type Props = {
+export type AuthScaffoldProps = {
   cardTitle: string;
   cardSubtitle: string;
   children: ReactNode;
@@ -34,17 +35,43 @@ type Props = {
 
 /**
  * Shared layout: gradient hero, brand row, large white card (rounded top), bottom link strip.
+ * Forward `ref` to the inner `ScrollView` so screens can scroll focused fields into view.
  */
-export function AuthScaffold({
-  cardTitle,
-  cardSubtitle,
-  children,
-  footer,
-  headerAccessory,
-}: Props) {
+export const AuthScaffold = forwardRef<ScrollView, AuthScaffoldProps>(
+  function AuthScaffold(
+    {
+      cardTitle,
+      cardSubtitle,
+      children,
+      footer,
+      headerAccessory,
+    },
+    ref,
+  ) {
+  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = (e: { endCoordinates: { height: number } }) => {
+      setKeyboardBottomInset(e.endCoordinates.height);
+    };
+    const onHide = () => setKeyboardBottomInset(0);
+
+    const subShow = Keyboard.addListener(showEvent, onShow);
+    const subHide = Keyboard.addListener(hideEvent, onHide);
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, []);
+
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <LinearGradient
         colors={[...AUTH_GRADIENT]}
         start={{ x: 0.15, y: 0 }}
@@ -67,9 +94,18 @@ export function AuthScaffold({
 
             <View style={styles.cardShell}>
               <ScrollView
+                ref={ref}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.cardScroll}>
+                contentContainerStyle={[
+                  styles.cardScroll,
+                  {
+                    paddingBottom:
+                      spacing.xl +
+                      keyboardBottomInset +
+                      (Platform.OS === 'android' ? spacing.lg : spacing.md),
+                  },
+                ]}>
                 <Text style={styles.cardTitle}>{cardTitle}</Text>
                 <Text style={styles.cardSubtitle}>{cardSubtitle}</Text>
                 {children}
@@ -83,14 +119,12 @@ export function AuthScaffold({
                 </View>
               </ScrollView>
             </View>
-
-            <View style={styles.bottomStrip}>{footer}</View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
-}
+});
 
 export function AuthWordmark() {
   const words = APP_NAME.trim().split(/\s+/);
@@ -137,7 +171,7 @@ export function AuthBackLink({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: AUTH_GRADIENT[0],
+    backgroundColor: '#0B6B6D',
   },
   safe: { flex: 1 },
   flex: { flex: 1 },
@@ -163,13 +197,13 @@ const styles = StyleSheet.create({
   wordFirst: {
     fontSize: 26,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.88)',
+    color: 'rgba(255,255,255,0.9)',
     letterSpacing: 0.3,
   },
   wordRest: {
     fontSize: 26,
     fontWeight: '800',
-    color: colors.primary,
+    color: '#FFFFFF',
     letterSpacing: 0.2,
   },
   cardShell: {
@@ -180,20 +214,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.07,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 4,
+    borderTopWidth: 1,
+    borderColor: '#D6EAE8',
   },
   cardScroll: {
     paddingHorizontal: spacing.lg + 4,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
-    flexGrow: 1,
   },
   cardTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: colors.primary,
+    color: colors.secondary,
     letterSpacing: 0.2,
   },
   cardSubtitle: {
@@ -217,11 +251,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 0.4,
   },
-  bottomStrip: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
   backRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,6 +261,6 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.95)',
+    color: '#FFFFFF',
   },
 });

@@ -40,7 +40,6 @@ function DashboardGlyph({
 
 export function DashboardCard({ title, subtitle, icon, onPress }: Props) {
   const mainSize = clinicIcons.size.md;
-  const chevronSize = clinicIcons.size.sm;
 
   return (
     <Pressable
@@ -51,14 +50,14 @@ export function DashboardCard({ title, subtitle, icon, onPress }: Props) {
       <Card mode="elevated" style={styles.card}>
         <Card.Content style={styles.content}>
           <LinearGradient
-            colors={['rgba(46, 189, 180, 0.22)', colors.surfaceVariant]}
+            colors={['#D2FAF4', '#F2FFFD']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.iconWrap}>
             <DashboardGlyph
               icon={icon}
               size={mainSize}
-              color={clinicIcons.color.primary}
+              color={colors.secondaryElevated}
             />
           </LinearGradient>
           <Text variant="titleMedium" style={styles.title} numberOfLines={2}>
@@ -67,13 +66,6 @@ export function DashboardCard({ title, subtitle, icon, onPress }: Props) {
           <Text variant="bodySmall" style={styles.subtitle} numberOfLines={3}>
             {subtitle}
           </Text>
-          <View style={styles.footer}>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={chevronSize}
-              color={clinicIcons.color.secondary}
-            />
-          </View>
         </Card.Content>
       </Card>
     </Pressable>
@@ -94,38 +86,47 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    minHeight: 172,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    minHeight: 168,
+    borderWidth: 1.5,
+    borderColor: 'rgba(10, 82, 87, 0.12)',
     ...shadows.card,
+    shadowColor: '#0A5257',
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   content: {
     flex: 1,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   iconWrap: {
     width: ICON_WRAP,
     height: ICON_WRAP,
-    borderRadius: radii.sm,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: clinicIcons.textGap,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 184, 174, 0.28)',
   },
   title: {
     ...typography.title,
     fontSize: 17,
+    fontWeight: '800',
     marginBottom: spacing.xs,
+    color: colors.secondary,
+    letterSpacing: -0.2,
   },
   subtitle: {
     ...typography.subtitle,
     flex: 1,
-  },
-  footer: {
-    alignItems: 'flex-end',
-    marginTop: spacing.xs,
+    color: colors.textMuted,
+    lineHeight: 20,
+    fontWeight: '500',
   },
 });

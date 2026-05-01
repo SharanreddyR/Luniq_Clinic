@@ -60,6 +60,7 @@ export default function RootLayout() {
         <Stack.Screen name="upload" />
         <Stack.Screen name="claim" />
         <Stack.Screen name="claim-status" />
+        <Stack.Screen name="reports" />
         <Stack.Screen name="doctor-availability" />
       </Stack>
     </AppProviders>

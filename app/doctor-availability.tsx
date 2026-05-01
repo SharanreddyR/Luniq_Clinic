@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Card, Divider, Switch, Text } from 'react-native-paper';
+import { Card, Chip, Switch, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
@@ -130,23 +130,33 @@ function DoctorRow({
   return (
     <Card mode="elevated" style={[clinicScreen.card, styles.card]}>
       <Card.Content>
-        <Text variant="titleMedium" style={styles.name}>
-          {doctor.name}
-        </Text>
-        <Text variant="bodyMedium" style={styles.department}>
-          {doctor.department}
-        </Text>
-
-        <View style={styles.slotsBlock}>
-          <Text variant="labelSmall" style={styles.slotsLabel}>
-            Time slots
-          </Text>
-          <Text variant="bodyMedium" style={styles.slotsValue}>
-            {doctor.timing}
-          </Text>
+        <View style={styles.nameRow}>
+          <View style={styles.nameBlock}>
+            <Text variant="titleMedium" style={styles.name}>
+              {doctor.name}
+            </Text>
+            <Text variant="bodyMedium" style={styles.department}>
+              {doctor.department}
+            </Text>
+            {doctor.designation ? (
+              <Text variant="bodySmall" style={styles.designation}>
+                {doctor.designation}
+              </Text>
+            ) : null}
+          </View>
+          <Chip
+            compact
+            style={[
+              styles.statusChip,
+              doctor.available ? styles.availableChip : styles.unavailableChip,
+            ]}
+            textStyle={[
+              styles.statusChipText,
+              doctor.available ? styles.availableText : styles.unavailableText,
+            ]}>
+            {doctor.available ? 'Available' : 'Unavailable'}
+          </Chip>
         </View>
-
-        <Divider style={styles.divider} />
 
         <View style={styles.toggleRow}>
           <View style={styles.toggleText}>
@@ -174,45 +184,68 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  intro: {
-    ...typography.subtitle,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-  },
   listContent: {
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
   },
   sep: {
     height: spacing.md,
   },
-  card: {},
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  nameBlock: {
+    flex: 1,
+  },
   name: {
     ...typography.title,
+    color: colors.secondary,
+    fontWeight: '700',
   },
   department: {
     ...typography.subtitle,
     marginTop: spacing.xs,
   },
-  slotsBlock: {
-    marginTop: spacing.md,
+  designation: {
+    marginTop: 4,
+    color: colors.textMuted,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
-  slotsLabel: {
-    ...typography.small,
-    marginBottom: 2,
+  statusChip: {
+    borderRadius: 999,
+    marginTop: 2,
   },
-  slotsValue: {
-    ...typography.subtitle,
+  availableChip: {
+    backgroundColor: '#E7F8EE',
   },
-  divider: {
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
+  unavailableChip: {
+    backgroundColor: '#F2F3F5',
+  },
+  statusChipText: {
+    fontWeight: '700',
+  },
+  availableText: {
+    color: '#1A7F42',
+  },
+  unavailableText: {
+    color: '#6B7280',
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: spacing.md,
   },
   toggleText: {
     flex: 1,
@@ -227,6 +260,7 @@ const styles = StyleSheet.create({
   toggleState: {
     ...typography.small,
     marginTop: 2,
+    color: colors.textMuted,
   },
   centered: {
     flex: 1,

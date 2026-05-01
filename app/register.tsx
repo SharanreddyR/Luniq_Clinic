@@ -1,4 +1,3 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import type { DocumentPickerAsset } from 'expo-document-picker';
 import { Link, useRouter } from 'expo-router';
@@ -22,9 +21,9 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BrandLogoMark } from '@/components/ClinicLogo';
+import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { clinicScreen, SCREEN_EDGE, spacing } from '@/constants';
+import { clinicScreen, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicApplicationMutation } from '@/hooks/useClinicApplicationMutation';
 import {
@@ -211,37 +210,9 @@ export default function RegisterScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}>
-            <View style={[styles.header, { paddingHorizontal: SCREEN_EDGE }]}>
-              <Pressable
-                onPress={goBack}
-                hitSlop={12}
-                style={styles.backBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Go back">
-                <MaterialCommunityIcons
-                  name="chevron-left"
-                  size={26}
-                  color={colors.primary}
-                />
-              </Pressable>
-              <View style={styles.headerBrand}>
-                <BrandLogoMark size={44} padded />
-                <View style={styles.headerTitles}>
-                  <Text variant="headlineSmall" style={styles.title}>
-                    Registration
-                  </Text>
-                  <Text variant="bodyMedium" style={styles.subtitle}>
-                    Clinic application
-                  </Text>
-                </View>
-              </View>
-            </View>
+            <CompactScreenHeader title="Registration" onBackPress={goBack} />
 
-            <View
-              style={[
-                styles.card,
-                { marginHorizontal: SCREEN_EDGE, padding: SCREEN_EDGE },
-              ]}>
+            <View style={styles.card}>
               <Text variant="bodyMedium" style={styles.lead}>
                 Complete the form below. We usually respond within 2–3 business
                 days.
@@ -531,41 +502,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xl,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-  },
-  backBtn: {
-    marginRight: spacing.xs,
-  },
-  headerBrand: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  headerTitles: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  title: {
-    fontWeight: '800',
-    color: colors.secondary,
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    color: colors.textMuted,
-    marginTop: 2,
-  },
   card: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
   },

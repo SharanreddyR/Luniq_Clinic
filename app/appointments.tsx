@@ -1,5 +1,4 @@
-import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -46,17 +45,6 @@ export default function AppointmentsScreen() {
   const query = useAppointments();
   const complete = useCompleteAppointment();
   const { showSuccess, showError } = useAppToast();
-  const listErrorToastShown = useRef(false);
-
-  useEffect(() => {
-    if (query.isError && !listErrorToastShown.current) {
-      listErrorToastShown.current = true;
-      showError('Could not load appointments. Pull down to retry.');
-    }
-    if (!query.isError) {
-      listErrorToastShown.current = false;
-    }
-  }, [query.isError, showError]);
 
   const { today, upcoming } = useMemo(
     () => partitionAppointmentsByDay(query.data ?? []),
@@ -82,11 +70,6 @@ export default function AppointmentsScreen() {
             tintColor={colors.primary}
           />
         }>
-        <Text variant="bodyMedium" style={styles.intro}>
-          Loaded from GET /appointments. Mark visits complete when they finish;
-          reschedule opens a demo-only notice.
-        </Text>
-
         {query.isPending && !query.data ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -94,15 +77,8 @@ export default function AppointmentsScreen() {
               Loading appointments…
             </Text>
           </View>
-        ) : query.isError ? (
-          <View style={styles.centered}>
-            <Text variant="bodyLarge" style={styles.error}>
-              Could not load appointments
-            </Text>
-            <Text variant="bodyMedium" style={styles.muted}>
-              Pull down to retry.
-            </Text>
-          </View>
+        ) : (query.data?.length ?? 0) === 0 ? (
+          <EmptyCard message="No appointments yet." />
         ) : (
           <>
             <SectionTitle title="Today’s appointments" />
@@ -301,10 +277,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl,
   },
-  intro: {
-    ...typography.subtitle,
-    marginBottom: spacing.lg,
-  },
   sectionTitle: {
     marginTop: spacing.sm,
     marginBottom: spacing.md,
@@ -372,11 +344,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 12,
     textAlign: 'center',
-  },
-  error: {
-    color: colors.error,
-    textAlign: 'center',
-    marginBottom: 8,
   },
   dialog: {
     backgroundColor: colors.surface,

@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import type { ComponentProps } from 'react';
+import { useMemo } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar, Button, Card, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,7 +11,6 @@ import {
   type ClinicDashboardIcon,
   DashboardCard,
 } from '@/components/dashboard/DashboardCard';
-import { BrandLogoMark } from '@/components/ClinicLogo';
 import {
   APP_NAME,
   clinicIcons,
@@ -20,7 +21,7 @@ import {
   spacing,
   typography,
 } from '@/constants';
-import { useAuthStore, usePatientStore } from '@/store';
+import { useAuthStore, usePatientStore, useVisitHistoryStore } from '@/store';
 
 const DASHBOARD_CARDS: {
   key: string;
@@ -30,6 +31,7 @@ const DASHBOARD_CARDS: {
   href:
     | '/patient-intake'
     | '/appointments'
+    | '/reports'
     | '/claim-status'
     | '/doctor-availability'
     | '/upload'
@@ -50,25 +52,18 @@ const DASHBOARD_CARDS: {
     href: '/appointments',
   },
   {
+    key: 'reports',
+    title: 'Reports',
+    subtitle: 'Patients visited, files & visit history',
+    icon: { pack: 'material', name: 'file-chart-outline' },
+    href: '/reports',
+  },
+  {
     key: 'claim-status',
     title: 'Claim status',
     subtitle: 'Submitted, verifying, approved, or rejected',
     icon: { pack: 'material', name: 'file-document-outline' },
     href: '/claim-status',
-  },
-  {
-    key: 'doctors',
-    title: 'Doctors availability',
-    subtitle: 'Roster, timings, and on-duty status',
-    icon: { pack: 'material', name: 'doctor' },
-    href: '/doctor-availability',
-  },
-  {
-    key: 'upload',
-    title: 'Upload center',
-    subtitle: 'Prescriptions, reports, and bills',
-    icon: { pack: 'material', name: 'cloud-upload' },
-    href: '/upload',
   },
   {
     key: 'clinic-settings',
@@ -77,29 +72,68 @@ const DASHBOARD_CARDS: {
     icon: { pack: 'ionicons', name: 'storefront-outline' },
     href: '/clinic-settings',
   },
+  {
+    key: 'doctors',
+    title: 'Doctors availability',
+    subtitle: 'Roster, timings, and on-duty status',
+    icon: { pack: 'material', name: 'doctor' },
+    href: '/doctor-availability',
+  },
 ];
 
-const HERO_TOP = 'rgba(46, 189, 180, 0.14)';
-const HERO_MID = 'rgba(244, 249, 249, 0.98)';
+/** Brighter hero wash → crisp white → soft clinic tint */
+const HERO_GRADIENT = ['#C8F5EE', '#FFFFFF', '#EEF9F7'] as const;
+
+type MciName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+function daypartMeta(now = new Date()): {
+  label: string;
+  icon: MciName;
+  tint: string;
+} {
+  const h = now.getHours();
+  if (h >= 5 && h < 12) {
+    return {
+      label: 'Good Morning',
+      icon: 'weather-sunset-up',
+      tint: '#E59610',
+    };
+  }
+  if (h >= 12 && h < 17) {
+    return {
+      label: 'Good Afternoon',
+      icon: 'brightness-7',
+      tint: '#F4C430',
+    };
+  }
+  return {
+    label: 'Good Evening',
+    icon: 'weather-night',
+    tint: '#5B7FD1',
+  };
+}
 
 export default function ClinicDashboardScreen() {
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
   const activePatient = usePatientStore((s) => s.activePatient);
   const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
+  const visitRecords = useVisitHistoryStore((s) => s.visits);
+
+  const distinctVisitPatients = useMemo(() => {
+    const keys = new Set<string>();
+    for (const v of visitRecords) {
+      keys.add(`${v.patientId}|${v.patientCardNumber}`);
+    }
+    return keys.size;
+  }, [visitRecords]);
+
+  const daypart = daypartMeta();
 
   const displayName =
     clinic?.contactName ?? user?.name ?? clinic?.name ?? 'Clinic';
-  const displaySub = clinic
-    ? [
-        clinic.name,
-        clinic.address
-          ? `Clinic ID: ${clinic.id}\n${clinic.address}`
-          : `Clinic ID: ${clinic.id}`,
-      ]
-        .filter(Boolean)
-        .join('\n')
-    : (user?.email ?? '');
+  const clinicNameLine = clinic?.name?.trim() ?? '';
+  const clinicAddressLine = clinic?.address?.trim() ?? '';
   const initial = displayName.charAt(0).toUpperCase();
 
   function goProfile() {
@@ -112,47 +146,167 @@ export default function ClinicDashboardScreen() {
         contentContainerStyle={styles.scrollOuter}
         showsVerticalScrollIndicator={false}>
         <LinearGradient
-          colors={[HERO_TOP, HERO_MID, colors.background]}
-          locations={[0, 0.55, 1]}
+          colors={[...HERO_GRADIENT]}
+          locations={[0, 0.42, 1]}
           style={styles.hero}>
           <View style={[clinicScreen.screenPadding, styles.heroInner]}>
-            <View style={styles.topBar}>
-              <Pressable
-                onPress={goProfile}
-                style={styles.profileBlock}
-                accessibilityRole="button"
-                accessibilityLabel="Open profile">
-                <View style={styles.iconBubble}>
-                  <BrandLogoMark size={28} padded />
-                </View>
-                <View style={styles.topBarText}>
-                  <Text variant="labelLarge" style={styles.greetingLabel}>
-                    Welcome back
+            <View style={styles.topHeader}>
+              <View style={styles.greetingWrap}>
+                <Text variant="titleSmall" style={styles.greetingTop}>
+                  Hello, {displayName.split(' ')[0]} 👋
+                </Text>
+                {clinic ? (
+                  <>
+                    {clinicNameLine ? (
+                      <Text
+                        variant="bodySmall"
+                        style={styles.greetingSub}
+                        numberOfLines={2}>
+                        {clinicNameLine}
+                      </Text>
+                    ) : null}
+                    {clinicAddressLine ? (
+                      <View style={styles.addressRow}>
+                        <MaterialCommunityIcons
+                          name="map-marker-outline"
+                          size={17}
+                          color={colors.textMuted}
+                          style={styles.addressIcon}
+                        />
+                        <Text
+                          variant="bodySmall"
+                          style={styles.greetingAddress}
+                          numberOfLines={3}>
+                          {clinicAddressLine}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {!clinicNameLine && !clinicAddressLine ? (
+                      <Text variant="bodySmall" style={styles.greetingSub}>
+                        Welcome to your clinic dashboard
+                      </Text>
+                    ) : null}
+                  </>
+                ) : (
+                  <Text
+                    variant="bodySmall"
+                    style={styles.greetingSub}
+                    numberOfLines={2}>
+                    {user?.email ?? 'Welcome to your clinic dashboard'}
                   </Text>
-                  <Text variant="headlineSmall" style={styles.name}>
-                    {displayName}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.email}>
-                    {displaySub}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                onPress={goProfile}
-                accessibilityRole="button"
-                accessibilityLabel="Open profile"
-                hitSlop={10}
-                style={({ pressed }) => [
-                  styles.avatarPress,
-                  pressed && styles.avatarPressPressed,
-                ]}>
-                <Avatar.Text size={52} label={initial} style={styles.avatar} />
-              </Pressable>
+                )}
+              </View>
+              <View style={styles.headerActions}>
+                <Pressable style={styles.notifyBtn} accessibilityRole="button">
+                  <MaterialCommunityIcons
+                    name="bell-outline"
+                    size={20}
+                    color={colors.secondary}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={goProfile}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open profile"
+                  hitSlop={10}
+                  style={({ pressed }) => [
+                    styles.avatarPress,
+                    pressed && styles.avatarPressPressed,
+                  ]}>
+                  <Avatar.Text size={46} label={initial} style={styles.avatar} />
+                </Pressable>
+              </View>
             </View>
           </View>
         </LinearGradient>
 
         <View style={[clinicScreen.screenPadding, styles.body]}>
+          <View style={styles.sectionHeadInline}>
+            <Text variant="labelSmall" style={styles.sectionKicker}>
+              Shortcuts
+            </Text>
+            <View style={styles.quickHeadingRow}>
+              <Text
+                variant="titleMedium"
+                style={[styles.sectionTitleTight, styles.quickActionsTitle]}
+                numberOfLines={1}>
+                Quick actions
+              </Text>
+              <View style={styles.daypartCluster}>
+                <MaterialCommunityIcons
+                  name={daypart.icon}
+                  size={15}
+                  color={daypart.tint}
+                  style={styles.daypartIcon}
+                />
+                <Text variant="labelSmall" style={styles.daypartGreeting}>
+                  {daypart.label}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickRow}>
+            {DASHBOARD_CARDS.slice(0, 4).map((item) => (
+              <Pressable
+                key={item.key}
+                onPress={() => router.push(item.href as Href)}
+                android_ripple={{ color: 'rgba(34, 184, 174, 0.18)' }}
+                style={({ pressed }) => [
+                  styles.quickCard,
+                  Platform.OS === 'ios' && pressed && styles.quickCardPressed,
+                ]}>
+                <LinearGradient
+                  colors={['#D2FAF4', '#E8FFFB']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.quickIconWrap}>
+                  <MaterialCommunityIcons
+                    name={
+                      item.icon.pack === 'material' ? item.icon.name : 'stethoscope'
+                    }
+                    size={23}
+                    color={colors.secondaryElevated}
+                  />
+                </LinearGradient>
+                <Text variant="labelLarge" style={styles.quickTitle}>
+                  {item.title}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={styles.summaryRow}>
+            <Card style={[styles.summaryCard, styles.summaryCardLeft]} mode="elevated">
+              <Card.Content>
+                <Text variant="labelSmall" style={styles.summaryLabel}>
+                  Visit records
+                </Text>
+                <Text variant="headlineSmall" style={styles.summaryValue}>
+                  {visitRecords.length}
+                </Text>
+                <Text variant="bodySmall" style={styles.summaryHint}>
+                  Saved on this device
+                </Text>
+              </Card.Content>
+            </Card>
+            <Card style={[styles.summaryCard, styles.summaryCardRight]} mode="elevated">
+              <Card.Content>
+                <Text variant="labelSmall" style={styles.summaryLabel}>
+                  Patients in reports
+                </Text>
+                <Text variant="headlineSmall" style={styles.summaryValue}>
+                  {distinctVisitPatients}
+                </Text>
+                <Text variant="bodySmall" style={styles.summaryHint}>
+                  Open Reports for history
+                </Text>
+              </Card.Content>
+            </Card>
+          </View>
+
           {activePatient ? (
             <Card style={styles.patientStrip} mode="elevated">
               <Card.Content style={styles.patientStripContent}>
@@ -184,8 +338,11 @@ export default function ClinicDashboardScreen() {
           ) : null}
 
           <View style={styles.sectionHead}>
+            <Text variant="labelSmall" style={styles.sectionKicker}>
+              Full menu
+            </Text>
             <Text variant="titleMedium" style={styles.sectionTitle}>
-              Quick actions
+              Doctors & services
             </Text>
             <View style={styles.sectionRule} />
           </View>
@@ -214,7 +371,7 @@ export default function ClinicDashboardScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F0FAF8',
   },
   scrollOuter: {
     paddingBottom: spacing.sm,
@@ -223,16 +380,215 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radii.lg,
     borderBottomRightRadius: radii.lg,
     marginBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(10, 82, 87, 0.08)',
     ...shadows.card,
-    shadowOpacity: 0.05,
-    elevation: 2,
+    shadowColor: '#0A5257',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   heroInner: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
   },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  greetingWrap: {
+    flex: 1,
+  },
+  greetingTop: {
+    ...typography.title,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+    color: colors.secondary,
+    marginBottom: spacing.xs / 2,
+    letterSpacing: -0.3,
+  },
+  greetingSub: {
+    ...typography.small,
+    color: colors.secondaryElevated,
+    lineHeight: 20,
+    fontWeight: '500',
+    opacity: 0.92,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 4,
+    maxWidth: '100%',
+  },
+  addressIcon: {
+    marginTop: 1,
+  },
+  greetingAddress: {
+    ...typography.small,
+    flex: 1,
+    color: colors.textMuted,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  notifyBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 184, 174, 0.35)',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+    shadowOpacity: 0.06,
+    elevation: 2,
+  },
   body: {
     paddingTop: 0,
+    paddingBottom: spacing.xxl + spacing.lg,
+  },
+  sectionHeadInline: {
+    marginBottom: spacing.sm,
+  },
+  quickHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  daypartCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  daypartIcon: {
+    marginTop: -1,
+  },
+  daypartGreeting: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '800',
+    color: colors.secondary,
+    letterSpacing: 0.5,
+    flexShrink: 0,
+  },
+  sectionKicker: {
+    color: colors.primary,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    opacity: 0.95,
+  },
+  sectionTitleTight: {
+    ...typography.title,
+    fontSize: 19,
+    color: colors.secondary,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  quickActionsTitle: {
+    flex: 1,
+    minWidth: 0,
+  },
+  quickRow: {
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+    paddingRight: spacing.sm,
+  },
+  quickCard: {
+    width: 132,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(10, 82, 87, 0.12)',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    ...shadows.card,
+    shadowColor: '#0A5257',
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  quickCardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+  },
+  quickIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 184, 174, 0.25)',
+  },
+  quickTitle: {
+    color: colors.secondary,
+    fontWeight: '800',
+    lineHeight: 20,
+    fontSize: 14,
+    letterSpacing: -0.2,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(10, 82, 87, 0.1)',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    ...shadows.card,
+    shadowColor: '#0A5257',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  summaryCardLeft: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  summaryCardRight: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.secondaryElevated,
+  },
+  summaryLabel: {
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  summaryValue: {
+    color: colors.secondary,
+    fontWeight: '800',
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+  },
+  summaryHint: {
+    color: colors.textMuted,
+    marginTop: spacing.xs / 2,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   topBar: {
     flexDirection: 'row',
@@ -287,14 +643,20 @@ const styles = StyleSheet.create({
   },
   avatar: {
     backgroundColor: colors.secondary,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   patientStrip: {
     marginBottom: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 184, 174, 0.35)',
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
     ...shadows.card,
+    shadowOpacity: 0.08,
+    elevation: 3,
   },
   patientStripContent: {
     flexDirection: 'row',
@@ -325,16 +687,19 @@ const styles = StyleSheet.create({
   },
   sectionHead: {
     marginBottom: spacing.md,
+    marginTop: spacing.xs,
   },
   sectionTitle: {
     ...typography.title,
-    fontSize: 18,
+    fontSize: 19,
+    fontWeight: '800',
     color: colors.secondary,
     marginBottom: spacing.sm,
+    letterSpacing: -0.2,
   },
   sectionRule: {
-    height: 3,
-    width: 40,
+    height: 4,
+    width: 48,
     borderRadius: 2,
     backgroundColor: colors.primary,
   },
@@ -342,13 +707,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.md,
     marginBottom: spacing.xs,
   },
   footerNote: {
     ...typography.small,
     textAlign: 'center',
-    marginTop: spacing.lg,
-    opacity: 0.85,
+    marginTop: spacing.xl,
+    opacity: 0.75,
+    color: colors.textMuted,
+    fontWeight: '500',
+  },
+  fabWrap: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+  },
+  fabBtn: {
+    borderRadius: radii.button + 2,
+    backgroundColor: colors.secondary,
+    ...shadows.card,
+  },
+  fabContent: {
+    minHeight: 50,
   },
 });

@@ -1,4 +1,5 @@
 import { api } from '@/services/http';
+import { isAxiosError } from 'axios';
 
 export type AppointmentStatus = 'pending' | 'completed';
 
@@ -67,20 +68,31 @@ function mapAppointmentRow(raw: unknown): Appointment | null {
   };
 }
 
-function normalizeAppointmentsResponse(data: unknown): Appointment[] | null {
-  const rows: unknown[] = Array.isArray(data)
-    ? data
-    : data &&
-        typeof data === 'object' &&
-        'appointments' in data &&
-        Array.isArray((data as { appointments: unknown }).appointments)
-      ? (data as { appointments: unknown[] }).appointments
-      : [];
+function appointmentRowsFromPayload(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== 'object') return [];
+  const o = data as Record<string, unknown>;
 
-  const list = rows
+  if (Array.isArray(o.appointments)) return o.appointments;
+  if (Array.isArray(o.data)) return o.data;
+
+  const nested = o.data;
+  if (
+    nested &&
+    typeof nested === 'object' &&
+    Array.isArray((nested as { appointments?: unknown }).appointments)
+  ) {
+    return (nested as { appointments: unknown[] }).appointments;
+  }
+
+  return [];
+}
+
+function normalizeAppointmentsResponse(data: unknown): Appointment[] {
+  const rows = appointmentRowsFromPayload(data);
+  return rows
     .map(mapAppointmentRow)
     .filter((a): a is Appointment => a != null);
-  return list.length ? list : null;
 }
 
 export function partitionAppointmentsByDay(
@@ -117,14 +129,22 @@ export function partitionAppointmentsByDay(
 
 /**
  * GET /appointments
+ * Returns an empty list when the route is missing, the payload is unknown, or the request fails
+ * (clinic build should stay usable before the backend ships this endpoint).
  */
 export async function fetchAppointments(): Promise<Appointment[]> {
-  const { data } = await api.get<unknown>('/appointments');
-  const list = normalizeAppointmentsResponse(data);
-  if (!list?.length) {
-    throw new Error('No appointments in response.');
+  try {
+    const { data } = await api.get<unknown>('/appointments');
+    return normalizeAppointmentsResponse(data);
+  } catch (err) {
+    if (__DEV__ && isAxiosError(err)) {
+      const status = err.response?.status;
+      if (status != null && status !== 404) {
+        console.warn('[appointments]', err.message);
+      }
+    }
+    return [];
   }
-  return list;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -10,31 +11,39 @@ type Props = {
   onBackPress?: () => void;
 };
 
-/**
- * Slim in-screen header (~44pt) — replaces tall Material Appbar on inner routes.
- */
 export function CompactScreenHeader({ title, onBackPress }: Props) {
   const goBack = onBackPress ?? (() => router.back());
 
   return (
-    <View style={styles.wrap}>
-      <Pressable
-        onPress={goBack}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        style={({ pressed }) => [styles.back, pressed && styles.backPressed]}>
-        <MaterialCommunityIcons
-          name="arrow-left"
-          size={clinicIcons.size.md}
-          color={colors.text}
-        />
-      </Pressable>
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
-      <View style={styles.backSpacer} />
-    </View>
+    <LinearGradient
+      colors={['#0B6B6D', '#1A9B98', '#40B9AE']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.wrap}>
+      <View style={styles.inner}>
+        <Pressable
+          onPress={goBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [styles.back, pressed && styles.backPressed]}>
+          <MaterialCommunityIcons
+            name="arrow-left"
+            size={clinicIcons.size.md}
+            color={colors.secondary}
+          />
+        </Pressable>
+        <View style={styles.titleBlock}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            Care workflow
+          </Text>
+        </View>
+        <View style={styles.backSpacer} />
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -42,37 +51,53 @@ const BACK_W = 40;
 
 const styles = StyleSheet.create({
   wrap: {
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginBottom: spacing.sm,
+  },
+  inner: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+    minHeight: 64,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     marginHorizontal: -spacing.sm,
-    marginBottom: spacing.xs,
-    backgroundColor: colors.background,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
   },
   back: {
     width: BACK_W,
-    height: 40,
+    height: BACK_W,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.xs,
-    borderRadius: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D7EBE9',
   },
   backPressed: {
-    opacity: 0.65,
-    backgroundColor: colors.surfaceVariant,
+    opacity: 0.9,
+    backgroundColor: '#EAF7F6',
+  },
+  titleBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    flex: 1,
     textAlign: 'center',
     fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
+    fontWeight: '800',
+    color: '#FFFFFF',
     letterSpacing: 0.2,
-    lineHeight: 22,
+    lineHeight: 20,
+  },
+  subtitle: {
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.92)',
+    letterSpacing: 0.4,
+    lineHeight: 16,
   },
   backSpacer: {
     width: BACK_W,

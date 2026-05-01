@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, TextInput } from 'react-native-paper';
 
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
@@ -10,13 +10,32 @@ import { colors } from '@/constants/Colors';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
 import { isValidPhoneOrEmail } from '@/utils';
 
+const SCROLL_TOP_PADDING = 20;
+
 export default function LoginScreen() {
   const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const authScrollRef = useRef<ScrollView>(null);
+  const passwordBlockY = useRef(0);
+
   const login = useLoginMutation();
+
+  const scrollPasswordIntoView = useCallback(() => {
+    const scroll = () => {
+      const y = passwordBlockY.current;
+      authScrollRef.current?.scrollTo({
+        y: Math.max(0, y - SCROLL_TOP_PADDING),
+        animated: true,
+      });
+    };
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 100);
+    setTimeout(scroll, 280);
+    setTimeout(scroll, 520);
+  }, []);
 
   useEffect(() => {
     login.reset();
@@ -43,10 +62,15 @@ export default function LoginScreen() {
           router.replace('/home');
         },
         onError: (err) => {
+          const msg =
+            err instanceof Error ? err.message : 'Sign-in failed. Try again.';
+          const lower = msg.toLowerCase();
+          const isCredentialFailure =
+            lower.includes('invalid credential') ||
+            lower.includes('unauthenticated') ||
+            lower.includes('credentials do not match');
           setSubmitError(
-            err instanceof Error
-              ? err.message
-              : 'Sign-in failed. Try again.',
+            isCredentialFailure ? 'Invalid credentials. Retry again.' : msg,
           );
         },
       },
@@ -56,6 +80,7 @@ export default function LoginScreen() {
   return (
     <>
     <AuthScaffold
+      ref={authScrollRef}
       cardTitle="Login"
       cardSubtitle="Sign in to continue to your clinic dashboard."
       footer={null}>
@@ -79,29 +104,36 @@ export default function LoginScreen() {
         {identifierError}
       </HelperText>
 
-      <TextInput
-        mode="flat"
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry={secure}
-        autoComplete="password"
-        textContentType="password"
-        style={styles.inputSpaced}
-        underlineColor={colors.border}
-        activeUnderlineColor={colors.primary}
-        left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
-        disabled={login.isPending}
-        right={
-          <TextInput.Icon
-            icon={secure ? 'eye-off' : 'eye'}
-            disabled={login.isPending}
-            onPress={() => {
-              if (!login.isPending) setSecure((s) => !s);
-            }}
-          />
-        }
-      />
+      <View
+        collapsable={false}
+        onLayout={(e) => {
+          passwordBlockY.current = e.nativeEvent.layout.y;
+        }}>
+        <TextInput
+          mode="flat"
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={secure}
+          autoComplete="password"
+          textContentType="password"
+          style={styles.inputSpaced}
+          underlineColor={colors.border}
+          activeUnderlineColor={colors.primary}
+          left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
+          disabled={login.isPending}
+          onFocus={scrollPasswordIntoView}
+          right={
+            <TextInput.Icon
+              icon={secure ? 'eye-off' : 'eye'}
+              disabled={login.isPending}
+              onPress={() => {
+                if (!login.isPending) setSecure((s) => !s);
+              }}
+            />
+          }
+        />
+      </View>
 
       {submitError ? (
         <HelperText type="error" visible style={styles.submitError}>

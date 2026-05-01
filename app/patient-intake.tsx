@@ -1,6 +1,7 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, type Href } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -19,6 +20,7 @@ import { colors } from '@/constants/Colors';
 import { usePatientByCardMutation } from '@/hooks/usePatientByCardMutation';
 import { usePatientStore } from '@/store';
 import type { PatientCardType, PatientRecord } from '@/types/patient';
+import { getMembershipExpiryInfo } from '@/utils/membershipExpiry';
 import { patientRecordForMember } from '@/utils/patientSelection';
 
 const PHOTO_SIZE = 64;
@@ -26,12 +28,40 @@ const PHOTO_R = 32;
 const CARD_PREFIX = 'LNQ-';
 
 const LINKED_CARD: PatientCardType[] = ['Family', 'Couple', 'Child'];
+const SUGGESTED_SUFFIXES = ['120045', '778899', '230011'] as const;
 
 function hasLinkedMembers(p: PatientRecord): boolean {
   const n = p.members?.length ?? 0;
   if (n === 0) return false;
   if (!p.cardType) return true;
   return LINKED_CARD.includes(p.cardType);
+}
+
+function HighlightedText({
+  text,
+  query,
+  textStyle,
+  highlightStyle,
+}: {
+  text: string;
+  query: string;
+  textStyle: object;
+  highlightStyle: object;
+}) {
+  const q = query.trim().toLowerCase();
+  if (!q) return <Text style={textStyle}>{text}</Text>;
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx < 0) return <Text style={textStyle}>{text}</Text>;
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + q.length);
+  const after = text.slice(idx + q.length);
+  return (
+    <Text style={textStyle}>
+      {before}
+      <Text style={highlightStyle}>{match}</Text>
+      {after}
+    </Text>
+  );
 }
 
 export default function PatientIntakeScreen() {
@@ -51,7 +81,16 @@ export default function PatientIntakeScreen() {
 
   const lookup = usePatientByCardMutation();
   const lookupRef = useRef(lookup);
+  const scrollRef = useRef<ScrollView | null>(null);
   lookupRef.current = lookup;
+
+  useEffect(() => {
+    if (!lookupHit || lookup.isPending) return;
+    const id = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 280);
+    return () => clearTimeout(id);
+  }, [lookupHit, lookup.isPending]);
 
   useFocusEffect(
     useCallback(() => {
@@ -113,6 +152,11 @@ export default function PatientIntakeScreen() {
     lookup.reset();
   }
 
+  function focusCardInput() {
+    // Keep the card input visible above the keyboard on smaller screens.
+    scrollRef.current?.scrollTo({ y: 90, animated: true });
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader title="Find patient" />
@@ -120,15 +164,10 @@ export default function PatientIntakeScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <View style={styles.hero}>
-            <Text variant="bodyMedium" style={styles.flowSub}>
-              Scan or type the card number, search, then confirm who is being
-              seen today. Family cards show everyone on the plan.
-            </Text>
-          </View>
 
           {activePatient && !lookupHit ? (
             <Card style={[clinicScreen.card, styles.resumeCard]} mode="elevated">
@@ -167,8 +206,11 @@ export default function PatientIntakeScreen() {
               <Text variant="titleMedium" style={styles.cardTitle}>
                 Card number
               </Text>
+              <Text variant="bodySmall" style={styles.cardSubtitle}>
+              Search by LNQ card number or scan barcode for faster patient check-in              </Text>
               <TextInput
-                label="Card number"
+                label="Search patient card"
+                placeholder="Enter card digits (e.g. 120045)"
                 value={inputSuffix}
                 onChangeText={(v) => {
                   setInputSuffix(normalizeCardSuffix(v));
@@ -179,13 +221,18 @@ export default function PatientIntakeScreen() {
                 mode="outlined"
                 autoCapitalize="characters"
                 autoCorrect={false}
+                keyboardType="number-pad"
                 style={styles.input}
+                textColor={colors.secondary}
                 {...inputFocusProps}
                 left={<TextInput.Affix text={CARD_PREFIX} />}
+                right={<TextInput.Icon icon="magnify" />}
+                onFocus={focusCardInput}
                 onSubmitEditing={() => runLookup(inputSuffix)}
                 returnKeyType="search"
                 disabled={lookup.isPending}
               />
+             
               <View style={styles.row2}>
                 <Button
                   mode="outlined"
@@ -207,11 +254,21 @@ export default function PatientIntakeScreen() {
                 </Button>
               </View>
               {lookup.isPending ? (
-                <View style={styles.inlineLoad}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text variant="bodySmall" style={styles.inlineLoadText}>
-                    Searching…
-                  </Text>
+                <View style={styles.skeletonWrap}>
+                  <View style={styles.inlineLoad}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text variant="bodySmall" style={styles.inlineLoadText}>
+                      Searching…
+                    </Text>
+                  </View>
+                  <View style={styles.skeletonCard}>
+                    <View style={styles.skeletonAvatar} />
+                    <View style={styles.skeletonLines}>
+                      <View style={[styles.skeletonLine, styles.skeletonLineLg]} />
+                      <View style={[styles.skeletonLine, styles.skeletonLineMd]} />
+                      <View style={[styles.skeletonLine, styles.skeletonLineSm]} />
+                    </View>
+                  </View>
                 </View>
               ) : null}
 
@@ -223,84 +280,113 @@ export default function PatientIntakeScreen() {
 
               {lookupHit && !lookup.isPending ? (
                 <View style={styles.resultsBlock}>
-                  <Text variant="titleSmall" style={styles.resultsTitle}>
-                    Membership lookup
-                  </Text>
+                  <Text style={styles.resultsTitle}>Patient found</Text>
 
-                  <View style={styles.membershipCard}>
-                    <View style={styles.membershipTop}>
-                      <Text variant="labelMedium" style={styles.membershipBadge}>
-                        {lookupHit.cardType ? `${lookupHit.cardType} plan` : 'Membership'}
-                      </Text>
-                      {lookupHit.status ? (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.statusPill,
-                            lookupHit.isValid ? styles.statusOk : styles.statusWarn,
-                          ]}>
-                          {lookupHit.status.toUpperCase()}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.personTop}>
-                      <Image source={{ uri: lookupHit.photo }} style={styles.hitPhoto} />
-                      <View style={styles.personTextCol}>
-                        <Text variant="titleMedium" style={styles.hitNameOnCard}>
-                          {lookupHit.name}
-                        </Text>
-                        <Text variant="bodySmall" style={styles.metaLineOnCard}>
-                          {lookupHit.cardNumber}
-                        </Text>
-                        <Text variant="bodySmall" style={styles.metaLineOnCard}>
-                          {lookupHit.planType ?? '—'} · Expires {lookupHit.expiresAt ?? '—'}
+                  <View style={styles.matchCard}>
+                    {lookupHit.status || lookupHit.planType ? (
+                      <View style={styles.statusPlanRow}>
+                        {lookupHit.status ? (
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              lookupHit.isValid
+                                ? styles.statusBadgeOk
+                                : styles.statusBadgeWarn,
+                            ]}>
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                lookupHit.isValid
+                                  ? styles.statusBadgeTextOk
+                                  : styles.statusBadgeTextWarn,
+                              ]}>
+                              {lookupHit.status}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {lookupHit.planType ? (
+                          <View style={styles.planBadge}>
+                            <Text style={styles.planBadgeLabel}>Plan</Text>
+                            <Text style={styles.planBadgeValue}>
+                              {lookupHit.planType}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    <View style={styles.matchRow}>
+                      <Image
+                        source={{ uri: lookupHit.photo }}
+                        style={styles.matchAvatar}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.matchDetails}>
+                        <HighlightedText
+                          text={lookupHit.name}
+                          query={inputSuffix}
+                          textStyle={styles.matchName}
+                          highlightStyle={styles.highlightInline}
+                        />
+                        <Text style={styles.matchSubtitle}>
+                          Primary member
+                          {lookupHit.cardType
+                            ? ` · ${lookupHit.cardType}`
+                            : ''}
                         </Text>
                       </View>
                     </View>
+
+                    <MembershipExpiryBar
+                      planType={lookupHit.planType}
+                      expiresAt={lookupHit.expiresAt}
+                      omitPlanLabel={Boolean(lookupHit.planType?.trim())}
+                    />
+
                     <Button
                       mode="contained"
-                      compact
                       onPress={() => onConfirmChoice(lookupHit, null)}
-                      style={styles.confirmBelow}
-                      contentStyle={styles.confirmBelowContent}>
-                      Confirm
+                      style={styles.matchPrimaryBtn}
+                      contentStyle={styles.matchPrimaryBtnContent}
+                      buttonColor={colors.primary}
+                      textColor={colors.onPrimary}>
+                      Continue with this patient
                     </Button>
                   </View>
 
                   {hasLinkedMembers(lookupHit) ? (
                     <>
-                      <Text variant="titleSmall" style={styles.membersTitle}>
-                        Members on this card ({lookupHit.members!.length})
+                      <Text style={styles.linkedHeading}>
+                        Other people on this card
                       </Text>
                       {lookupHit.members!.map((m, index) => (
-                        <View key={`${m.name}-${index}`} style={styles.memberCard}>
-                          <View style={styles.personTop}>
-                            <Image
-                              source={{ uri: m.photo }}
-                              style={styles.hitPhoto}
+                        <View key={`${m.name}-${index}`} style={styles.linkedSimple}>
+                          <Image
+                            source={{ uri: m.photo }}
+                            style={styles.linkedSimpleAvatar}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.linkedSimpleBody}>
+                            <HighlightedText
+                              text={m.name}
+                              query={inputSuffix}
+                              textStyle={styles.linkedSimpleName}
+                              highlightStyle={styles.highlightInline}
                             />
-                            <View style={styles.personTextCol}>
-                              <Text variant="titleMedium" style={styles.hitName}>
-                                {m.name}
-                              </Text>
-                              <Text variant="bodyMedium" style={styles.hitMobile}>
-                                {m.name} · {m.relation ?? 'member'}
-                              </Text>
-                              <Text variant="bodySmall" style={styles.metaLine}>
-                                {lookupHit.cardNumber}
-                              </Text>
-                              <Text variant="bodySmall" style={styles.metaLine}>
-                                Age: {m.age ?? '—'} · Gender: {m.gender ?? '—'}
-                              </Text>
-                            </View>
+                            <Text style={styles.linkedSimpleMeta}>
+                              {[m.relation, m.age != null ? `Age ${m.age}` : null, m.gender]
+                                .filter(Boolean)
+                                .join(' · ') || 'Member'}
+                            </Text>
                           </View>
                           <Button
-                            mode="contained"
+                            mode="outlined"
                             compact
                             onPress={() => onConfirmChoice(lookupHit, index)}
-                            style={styles.confirmBelow}
-                            contentStyle={styles.confirmBelowContent}>
-                            Confirm
+                            style={styles.linkedSimpleBtn}
+                            labelStyle={styles.linkedSimpleBtnLabel}
+                            textColor={colors.primary}>
+                            Select
                           </Button>
                         </View>
                       ))}
@@ -313,6 +399,56 @@ export default function PatientIntakeScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Full-width expiry strip aligned with primary action button height. */
+function MembershipExpiryBar({
+  planType,
+  expiresAt,
+  omitPlanLabel = false,
+}: {
+  planType?: string;
+  expiresAt?: string | null;
+  omitPlanLabel?: boolean;
+}) {
+  const info = getMembershipExpiryInfo(expiresAt);
+  const highlight = info.isUrgent || info.isExpired;
+
+  let daysPart = '';
+  if (info.daysRemaining !== null) {
+    if (info.isExpired) {
+      const n = Math.abs(info.daysRemaining);
+      daysPart = ` · Expired ${n} day${n === 1 ? '' : 's'} ago`;
+    } else if (info.daysRemaining === 0) {
+      daysPart = ' · Expires today';
+    } else {
+      daysPart = ` · ${info.daysRemaining} day${
+        info.daysRemaining === 1 ? '' : 's'
+      } left`;
+    }
+  }
+
+  const planLabel = planType?.trim() ? planType : 'Plan';
+  const lead = omitPlanLabel ? '' : `${planLabel} · `;
+
+  return (
+    <View style={[styles.expiryBar, highlight && styles.expiryBarUrgent]}>
+      <View style={styles.expiryBarInner}>
+        <MaterialCommunityIcons
+          name="calendar-outline"
+          size={20}
+          color={highlight ? '#991B1B' : colors.primary}
+        />
+        <Text
+          variant="bodyMedium"
+          style={[styles.expiryBarText, highlight && styles.expiryBarTextUrgent]}
+          numberOfLines={2}>
+          {lead}Expires {info.displayDate}
+          {daysPart}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -343,7 +479,7 @@ const styles = StyleSheet.create({
   heroKicker: {
     color: colors.primary,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     marginBottom: spacing.xs,
   },
   flowTitle: {
@@ -359,6 +495,12 @@ const styles = StyleSheet.create({
   lookupCard: {
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: radii.card + 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
+    elevation: 2,
   },
   cardTitle: {
     ...typography.title,
@@ -368,9 +510,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   lookupError: { marginTop: spacing.xs },
+  cardSubtitle: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
   input: {
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
+  },
+  suggestionsBlock: {
+    marginBottom: spacing.sm,
+  },
+  suggestionsTitle: {
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  suggestionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  suggestionChip: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filtersWrap: {
+    marginBottom: spacing.sm,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  filterChip: {
+    backgroundColor: colors.surfaceVariant,
   },
   row2: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   half: { flex: 1 },
@@ -383,127 +558,244 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   inlineLoadText: { color: colors.textMuted },
-  resultsBlock: { marginTop: spacing.lg },
-  resultsTitle: {
-    ...typography.title,
-    fontSize: 15,
-    marginBottom: spacing.md,
-    color: colors.secondary,
+  skeletonWrap: {
+    marginTop: spacing.sm,
   },
-  membershipCard: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
+  skeletonCard: {
+    marginTop: spacing.sm,
     borderRadius: radii.card,
-    backgroundColor: '#0f3d5c',
     borderWidth: 1,
-    borderColor: '#156b8a',
-  },
-  membershipTop: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  membershipBadge: {
-    color: '#c9f4f0',
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  statusPill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: 999,
-    overflow: 'hidden',
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  statusOk: {
-    color: '#104832',
-    backgroundColor: '#b2f5d6',
-  },
-  statusWarn: {
-    color: '#5a3200',
-    backgroundColor: '#ffd89f',
-  },
-  personCard: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  memberCard: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  personTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: spacing.md,
-    marginBottom: spacing.md,
   },
-  hitPhoto: {
+  skeletonAvatar: {
     width: PHOTO_SIZE,
     height: PHOTO_SIZE,
     borderRadius: PHOTO_R,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceVariant,
   },
-  personTextCol: { flex: 1, minWidth: 0 },
-  hitName: {
+  skeletonLines: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  skeletonLine: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceVariant,
+  },
+  skeletonLineLg: { width: '80%' },
+  skeletonLineMd: { width: '60%' },
+  skeletonLineSm: { width: '45%' },
+  resultsBlock: { marginTop: spacing.lg },
+  resultsTitle: {
+    fontSize: 13,
     fontWeight: '700',
-    color: colors.secondary,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: spacing.sm,
   },
-  hitNameOnCard: {
+  matchCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: '#062d2f',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  statusPlanRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  planBadgeLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.onPrimary,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  planBadgeValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.secondary,
+    flexShrink: 1,
+  },
+  statusBadgeOk: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusBadgeWarn: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  statusBadgeTextOk: {
+    color: '#166534',
+  },
+  statusBadgeTextWarn: {
+    color: '#92400E',
+  },
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
     marginBottom: spacing.sm,
   },
-  metaLine: {
+  matchAvatar: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: PHOTO_R,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  matchDetails: {
+    flex: 1,
+    minWidth: 0,
+  },
+  matchName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.secondary,
+    lineHeight: 26,
+    marginBottom: 4,
+  },
+  matchSubtitle: {
+    fontSize: 14,
     color: colors.textMuted,
-    marginTop: 2,
+    marginBottom: 0,
+    lineHeight: 20,
   },
-  metaLineOnCard: {
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 2,
-  },
-  hitLabel: {
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-    marginBottom: 2,
-    letterSpacing: 0.2,
-  },
-  hitCardNo: {
-    color: colors.secondary,
-    fontWeight: '600',
-  },
-  hitCardType: {
-    color: colors.secondary,
-    fontWeight: '600',
-  },
-  hitMobile: {
-    color: colors.secondary,
-  },
-  confirmBelow: {
+  expiryBar: {
     alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
     borderRadius: radii.button,
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  expiryBarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    maxWidth: '100%',
+  },
+  expiryBarUrgent: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  expiryBarText: {
+    flexShrink: 1,
+    textAlign: 'left',
+    color: colors.secondary,
+    fontWeight: '600',
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  expiryBarTextUrgent: {
+    color: '#991B1B',
+  },
+  matchPrimaryBtn: {
+    borderRadius: radii.button,
+    marginTop: 0,
+  },
+  matchPrimaryBtnContent: {
+    minHeight: 48,
+    paddingVertical: 8,
+  },
+  linkedHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: spacing.sm,
     marginTop: spacing.xs,
   },
-  confirmBelowContent: {
-    minHeight: 40,
-    paddingVertical: 6,
-  },
-  membersTitle: {
-    ...typography.title,
-    fontSize: 15,
-    marginTop: spacing.sm,
+  linkedSimple: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  linkedSimpleAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceVariant,
+  },
+  linkedSimpleBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  linkedSimpleName: {
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.secondary,
+  },
+  linkedSimpleMeta: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  linkedSimpleBtn: {
+    marginLeft: spacing.xs,
+    borderRadius: radii.sm,
+    borderColor: colors.primary,
+  },
+  linkedSimpleBtnLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginVertical: 4,
+    marginHorizontal: 4,
+  },
+  highlightInline: {
+    backgroundColor: '#ffef99',
+    borderRadius: 4,
   },
   resumeCard: {
     marginBottom: spacing.lg,

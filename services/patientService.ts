@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/constants/config';
 import { api } from '@/services/http';
 import { isAxiosError } from 'axios';
 import type {
@@ -21,6 +22,28 @@ type ApiLookupMember = {
   photo_url?: string;
 };
 
+const PLACEHOLDER_PHOTO = 'https://via.placeholder.com/150';
+
+/** Turn API `photo_url` / `photo` into a URI React Native `Image` can load. */
+function resolveMemberPhotoUri(photoUrl?: string, photo?: string): string {
+  const candidates = [photoUrl, photo];
+  for (const raw of candidates) {
+    if (typeof raw !== 'string') continue;
+    const s = raw.trim();
+    if (!s) continue;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith('//')) return `https:${s}`;
+    if (s.startsWith('/')) {
+      try {
+        return `${new URL(API_BASE_URL).origin}${s}`;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return PLACEHOLDER_PHOTO;
+}
+
 type ApiLookupData = {
   card_number?: string;
   status?: string;
@@ -37,10 +60,7 @@ type ApiLookupData = {
 function mapLookupMember(m: ApiLookupMember): PatientMember | null {
   const name = typeof m.name === 'string' ? m.name.trim() : '';
   if (!name) return null;
-  const photo =
-    (typeof m.photo_url === 'string' && m.photo_url.trim()) ||
-    (typeof m.photo === 'string' && m.photo.trim()) ||
-    'https://via.placeholder.com/150';
+  const photo = resolveMemberPhotoUri(m.photo_url, m.photo);
   return {
     id: typeof m.id === 'number' ? m.id : undefined,
     personId: typeof m.person_id === 'number' ? m.person_id : undefined,

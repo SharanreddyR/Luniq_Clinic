@@ -1,13 +1,14 @@
 import { MD3LightTheme, type MD3Theme } from 'react-native-paper';
 
 import { colors } from '@/constants/Colors';
+import { radii } from '@/constants/designSystem';
 
 const baseFonts = MD3LightTheme.fonts;
 
 /** React Native Paper MD3 — clinic palette, 10px roundness, readable type scale */
 export const clinicPaperTheme = {
   ...MD3LightTheme,
-  roundness: 10,
+  roundness: radii.button,
   /** Paper reads this at runtime; MD3Theme type omits `components` in some versions. */
   components: {
     Button: {
@@ -20,21 +21,21 @@ export const clinicPaperTheme = {
     ...baseFonts,
     titleLarge: {
       ...baseFonts.titleLarge,
-      fontSize: 19,
-      lineHeight: 26,
+      fontSize: 20,
+      lineHeight: 28,
       fontWeight: '700',
       letterSpacing: 0.1,
     },
     titleMedium: {
       ...baseFonts.titleMedium,
-      fontSize: 17,
-      lineHeight: 24,
+      fontSize: 18,
+      lineHeight: 26,
       fontWeight: '600',
       letterSpacing: 0.1,
     },
     titleSmall: {
       ...baseFonts.titleSmall,
-      fontSize: 15,
+      fontSize: 16,
       lineHeight: 22,
       fontWeight: '600',
     },
@@ -45,12 +46,12 @@ export const clinicPaperTheme = {
     },
     bodyMedium: {
       ...baseFonts.bodyMedium,
-      fontSize: 15,
-      lineHeight: 22,
+      fontSize: 16,
+      lineHeight: 24,
     },
     bodySmall: {
       ...baseFonts.bodySmall,
-      fontSize: 12.5,
+      fontSize: 13,
       lineHeight: 18,
     },
     labelLarge: {

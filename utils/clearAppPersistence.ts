@@ -6,12 +6,14 @@ import {
   useAuthStore,
   useClinicSettingsStore,
   usePatientStore,
+  useVisitHistoryStore,
 } from '@/store';
 
 const PERSIST_KEYS = [
   'clinic-app-auth',
   'clinic-app-patient',
   'clinic-app-settings',
+  'clinic-app-visit-history',
 ] as const;
 
 /**
@@ -23,6 +25,7 @@ export async function clearAllPersistedAppState(): Promise<void> {
 
   useAuthStore.getState().clearSession();
   usePatientStore.getState().clearActivePatient();
+  useVisitHistoryStore.getState().clearHistory();
   useClinicSettingsStore.setState({
     openTime: DEFAULT_OPEN_TIME,
     closeTime: DEFAULT_CLOSE_TIME,

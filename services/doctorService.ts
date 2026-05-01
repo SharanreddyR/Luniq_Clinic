@@ -4,6 +4,8 @@ export type Doctor = {
   id: number;
   name: string;
   department: string;
+  /** Degrees / credentials, e.g. MBBS, MD */
+  designation: string;
   available: boolean;
   /** Human-readable schedule / time slots, e.g. weekday hours */
   timing: string;
@@ -34,6 +36,16 @@ function mapDoctorRow(raw: unknown): Doctor | null {
         : typeof o.specialization === 'string'
           ? o.specialization
         : '';
+  const designationRaw =
+    typeof o.qualification === 'string'
+      ? o.qualification
+      : typeof o.designation === 'string'
+        ? o.designation
+        : typeof o.degree === 'string'
+          ? o.degree
+          : typeof o.credentials === 'string'
+            ? o.credentials
+            : '';
   const timingRaw =
     typeof o.timing === 'string'
       ? o.timing
@@ -41,8 +53,6 @@ function mapDoctorRow(raw: unknown): Doctor | null {
         ? o.timeSlots
         : typeof o.slots === 'string'
           ? o.slots
-          : typeof o.qualification === 'string'
-            ? o.qualification
           : '';
   const status =
     typeof o.status === 'string' ? o.status.toLowerCase().trim() : '';
@@ -56,6 +66,7 @@ function mapDoctorRow(raw: unknown): Doctor | null {
     id,
     name,
     department: departmentRaw.trim() || 'General',
+    designation: designationRaw.trim(),
     available,
     timing: timingRaw.trim() || '—',
   };

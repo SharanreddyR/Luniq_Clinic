@@ -42,6 +42,7 @@ import {
   useAuthStore,
   useClaimDraftStore,
   usePatientStore,
+  useVisitHistoryStore,
 } from '@/store';
 
 function isImageLikeAsset(asset: DocumentPickerAsset | null): boolean {
@@ -386,6 +387,36 @@ export default function PatientIntakeVisitScreen() {
         },
         services,
         amount: amountStr,
+      });
+
+      const serviceAmountsSnapshot: Record<string, string> = {};
+      for (const s of services) {
+        const v = serviceAmounts[s];
+        if (v != null && v !== '') serviceAmountsSnapshot[s] = v;
+      }
+
+      const attachments = INTAKE_UPLOAD_ROWS.map(({ category }) => ({
+        category,
+        files: assets[category].map((a) => ({
+          name: a.name ?? 'Attachment',
+          mimeType: a.mimeType ?? null,
+        })),
+      }));
+
+      useVisitHistoryStore.getState().addVisit({
+        id: slipId,
+        patientId: activePatient.id,
+        patientName: activePatient.name,
+        patientCardNumber: activePatient.cardNumber,
+        completedAt: new Date().toISOString(),
+        slipId,
+        doctorName: selectedDoctor.name,
+        department: selectedDoctor.department,
+        services,
+        serviceAmounts: serviceAmountsSnapshot,
+        totalAmount: amountStr,
+        symptoms: symptomsStr,
+        attachments,
       });
 
       let pdfUri: string | null = null;
