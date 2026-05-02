@@ -2,6 +2,7 @@ import type { DocumentPickerAsset } from 'expo-document-picker';
 import { Redirect, router, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -28,19 +29,32 @@ import { ClaimCameraModal } from '@/components/ClaimCameraModal';
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
+import { USE_MOCK_CLINIC_SERVICES_WHEN_EMPTY } from '@/constants/config';
 import { colors } from '@/constants/Colors';
+import { MOCK_CLINIC_VISIT_CATALOG } from '@/constants/mockClinicVisitCatalog';
 import { INTAKE_UPLOAD_ROWS } from '@/constants/intakeUploads';
 import { DEFAULT_VISIT_SERVICES } from '@/constants/visitServices';
 import { useAppToast } from '@/hooks/useAppToast';
 import { useDoctors } from '@/hooks/useDoctors';
 import { useUploadDocument } from '@/hooks/useUploadDocument';
-import { composeAdminVisitApprovalEmail } from '@/services/mailAdminVisitApproval';
 import { pickDocument, type UploadCategory } from '@/services/uploadService';
 import type { Doctor } from '@/services/doctorService';
+import {
+  buildSubmitLinesFromCatalog,
+  fetchClinicVisitServicesCatalog,
+  isConsultationCatalogItem,
+  selectionKeysToServiceLabels,
+  startClinicVisit,
+  submitClinicVisit,
+  uploadClinicVisitDocument,
+  type ClinicVisitCatalogItem,
+  type StartVisitResponse,
+  type VisitDocumentType,
+} from '@/services/visitService';
 import { printVisitSummaryPdf } from '@/services/visitSummaryPdf';
 import {
   useAuthStore,
-  useClaimDraftStore,
+  useIntakeVisitHandoffStore,
   usePatientStore,
   useVisitHistoryStore,
 } from '@/store';
@@ -50,6 +64,28 @@ function isImageLikeAsset(asset: DocumentPickerAsset | null): boolean {
   const mime = asset.mimeType?.toLowerCase() ?? '';
   if (mime.startsWith('image/')) return true;
   return /\.(jpe?g|png|gif|webp|heic|heif)(\?|$)/i.test(asset.uri);
+}
+
+function mapIntakeCategoryToVisitDocumentType(
+  category: UploadCategory,
+): VisitDocumentType {
+  if (category === 'bill') return 'invoice';
+  return category;
+}
+
+function isConsultationServiceKey(
+  key: string,
+  catalog: ClinicVisitCatalogItem[],
+): boolean {
+  if (key.startsWith('l:')) {
+    return key.slice(2) === 'Consultation';
+  }
+  if (key.startsWith('c:')) {
+    const id = Number(key.slice(2));
+    const row = catalog.find((s) => s.id === id);
+    return row ? isConsultationCatalogItem(row) : false;
+  }
+  return false;
 }
 
 function IntakeAttachmentRow({
@@ -225,10 +261,13 @@ function IntakeAttachmentRow({
 
 export default function PatientIntakeVisitScreen() {
   const activePatient = usePatientStore((s) => s.activePatient);
+  const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
   const setVisitSession = usePatientStore((s) => s.setVisitSession);
-  const setDraft = useClaimDraftStore((s) => s.setDraft);
+  const clearVisitSession = usePatientStore((s) => s.clearVisitSession);
+  const handoff = useIntakeVisitHandoffStore((s) => s.handoff);
+  const clearHandoff = useIntakeVisitHandoffStore((s) => s.clearHandoff);
   const clinic = useAuthStore((s) => s.clinic);
-  const { showSuccess } = useAppToast();
+  const { showSuccess, showError } = useAppToast();
 
   const doctorsQuery = useDoctors();
   const upload = useUploadDocument();
@@ -237,8 +276,16 @@ export default function PatientIntakeVisitScreen() {
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
 
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [serviceAmounts, setServiceAmounts] = useState<Record<string, string>>({});
+  /** `c:{id}` from GET /clinic/services, or `l:{name}` for offline intake */
+  const [selectedServiceKeys, setSelectedServiceKeys] = useState<string[]>([]);
+  const [serviceAmounts, setServiceAmounts] = useState<Record<string, string>>(
+    {},
+  );
+  const [clinicCatalog, setClinicCatalog] = useState<ClinicVisitCatalogItem[]>(
+    [],
+  );
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState('');
 
   const [assets, setAssets] = useState<
@@ -254,6 +301,11 @@ export default function PatientIntakeVisitScreen() {
   );
   const captureCategoryRef = useRef<UploadCategory | null>(null);
   const [saving, setSaving] = useState(false);
+  const [visitId, setVisitId] = useState<number | null>(null);
+  const [visitMeta, setVisitMeta] = useState<StartVisitResponse | null>(null);
+  const [visitStartError, setVisitStartError] = useState<string | null>(null);
+  const [startingVisit, setStartingVisit] = useState(false);
+  const [savingOverlayMessage, setSavingOverlayMessage] = useState('');
   const inputFocusProps = {
     outlineColor: colors.border,
     activeOutlineColor: colors.primary,
@@ -263,6 +315,180 @@ export default function PatientIntakeVisitScreen() {
   useEffect(() => {
     captureCategoryRef.current = cameraCategory;
   }, [cameraCategory]);
+
+  const useApiVisit = useMemo(
+    () =>
+      !!(
+        activePatient?.healthCardId &&
+        activePatient.id != null &&
+        Number.isFinite(Number(activePatient.id))
+      ),
+    [activePatient?.healthCardId, activePatient?.id],
+  );
+
+  const visitFromHandoff = Boolean(useApiVisit && handoff);
+
+  useEffect(() => {
+    setSelectedServiceKeys([]);
+    setServiceAmounts({});
+  }, [useApiVisit]);
+
+  /** Step 1 handoff: visit already started on intake; lock doctor and catalogue. */
+  useEffect(() => {
+    if (!useApiVisit || !handoff) return;
+    setVisitId(handoff.visitId);
+    setVisitMeta(handoff.visitMeta);
+    setVisitStartError(null);
+    setStartingVisit(false);
+    setDepartment(handoff.doctorDepartment);
+    setSelectedDoctor({
+      id: handoff.doctorId,
+      name: handoff.doctorName,
+      department: handoff.doctorDepartment,
+      designation: '',
+      available: true,
+      timing: '',
+    });
+    setClinicCatalog(handoff.catalog);
+    setCatalogLoading(false);
+    setCatalogError(null);
+  }, [useApiVisit, handoff]);
+
+  useEffect(() => {
+    if (!useApiVisit) {
+      setClinicCatalog([]);
+      setCatalogError(null);
+      setCatalogLoading(false);
+      return;
+    }
+    if (handoff) {
+      return;
+    }
+    let cancelled = false;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    fetchClinicVisitServicesCatalog()
+      .then((rows) => {
+        if (!cancelled) {
+          setClinicCatalog(rows);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setClinicCatalog([]);
+          setCatalogError(
+            e instanceof Error ? e.message : 'Could not load services.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useApiVisit, handoff]);
+
+  const apiReturnedEmptyServices = useMemo(
+    () =>
+      useApiVisit &&
+      !catalogLoading &&
+      !catalogError &&
+      clinicCatalog.length === 0,
+    [useApiVisit, catalogLoading, catalogError, clinicCatalog.length],
+  );
+
+  const usingMockCatalog = useMemo(
+    () =>
+      apiReturnedEmptyServices &&
+      USE_MOCK_CLINIC_SERVICES_WHEN_EMPTY &&
+      MOCK_CLINIC_VISIT_CATALOG.length > 0,
+    [apiReturnedEmptyServices],
+  );
+
+  /** API catalogue, or mock rows for UI testing when API returns []. */
+  const displayCatalog = useMemo(() => {
+    if (clinicCatalog.length > 0) return clinicCatalog;
+    if (usingMockCatalog) return MOCK_CLINIC_VISIT_CATALOG;
+    return [];
+  }, [clinicCatalog, usingMockCatalog]);
+
+  const serviceChipRows = useMemo(() => {
+    if (useApiVisit && displayCatalog.length > 0) {
+      return displayCatalog.map((s) => ({
+        key: `c:${s.id}`,
+        label: s.name,
+        listPrice: s.price,
+      }));
+    }
+    return DEFAULT_VISIT_SERVICES.map((name) => ({
+      key: `l:${name}`,
+      label: name,
+      listPrice: 0,
+    }));
+  }, [useApiVisit, displayCatalog]);
+
+  /** POST /clinic/visits/start only when not using Step 1 handoff (offline / legacy). */
+  useEffect(() => {
+    if (!useApiVisit || handoff) {
+      if (!useApiVisit) {
+        setVisitId(null);
+        setVisitMeta(null);
+        setVisitStartError(null);
+        setStartingVisit(false);
+      }
+      return;
+    }
+    if (
+      !activePatient?.healthCardId ||
+      activePatient.id == null ||
+      !selectedDoctor
+    ) {
+      setVisitId(null);
+      setVisitMeta(null);
+      setVisitStartError(null);
+      setStartingVisit(false);
+      return;
+    }
+
+    let cancelled = false;
+    setVisitId(null);
+    setVisitMeta(null);
+    setVisitStartError(null);
+    setStartingVisit(true);
+
+    startClinicVisit({
+      healthCardId: activePatient.healthCardId,
+      personId: activePatient.id,
+      doctorId: selectedDoctor.id,
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setVisitId(row.visit_id);
+        setVisitMeta(row);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg =
+          e instanceof Error ? e.message : 'Could not start visit.';
+        setVisitStartError(msg);
+        setVisitId(null);
+        setVisitMeta(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStartingVisit(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    useApiVisit,
+    handoff,
+    activePatient?.healthCardId,
+    activePatient?.id,
+    selectedDoctor?.id,
+  ]);
 
   const allDoctors = doctorsQuery.data ?? [];
   const departments = useMemo(() => {
@@ -298,13 +524,20 @@ export default function PatientIntakeVisitScreen() {
 
   const appendAsset = useCallback(
     (category: UploadCategory, asset: DocumentPickerAsset) => {
+      const hcId = activePatient?.healthCardId;
+      const personId = activePatient?.id;
+      const apiVisit = !!(hcId && personId);
+
       setAssets((prev) => ({
         ...prev,
         [category]: [...prev[category], asset],
       }));
-      upload.mutate({ category, asset });
+
+      if (!apiVisit) {
+        upload.mutate({ category, asset });
+      }
     },
-    [upload],
+    [activePatient?.healthCardId, activePatient?.id, upload],
   );
 
   const removeAssetAt = useCallback(
@@ -331,52 +564,166 @@ export default function PatientIntakeVisitScreen() {
     if (a) appendAsset(category, a);
   }
 
-  function toggleService(name: string) {
-    setSelectedServices((prev) => {
-      const exists = prev.includes(name);
-      const next = exists ? prev.filter((s) => s !== name) : [...prev, name];
+  function toggleServiceKey(key: string, listPrice?: number) {
+    setSelectedServiceKeys((prev) => {
+      const exists = prev.includes(key);
       if (exists) {
         setServiceAmounts((curr) => {
           const copy = { ...curr };
-          delete copy[name];
+          delete copy[key];
           return copy;
         });
+        return prev.filter((k) => k !== key);
       }
-      return next;
+      setServiceAmounts((curr) => ({
+        ...curr,
+        [key]:
+          curr[key] !== undefined && curr[key] !== ''
+            ? curr[key]
+            : listPrice != null && listPrice >= 0
+              ? String(listPrice)
+              : '',
+      }));
+      return [...prev, key];
     });
   }
 
-  function setAmountForService(name: string, raw: string) {
+  function setAmountForServiceKey(key: string, raw: string) {
     const cleaned = raw.replace(/[^\d.]/g, '');
     const parts = cleaned.split('.');
     const normalized =
       parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join('')}`;
-    setServiceAmounts((prev) => ({ ...prev, [name]: normalized }));
+    setServiceAmounts((prev) => ({ ...prev, [key]: normalized }));
   }
 
   const showCamera = Platform.OS !== 'web';
 
   const totalAmount = useMemo(() => {
-    return selectedServices.reduce((sum, service) => {
-      const n = Number(serviceAmounts[service] ?? '0');
+    return selectedServiceKeys.reduce((sum, key) => {
+      const n = Number(serviceAmounts[key] ?? '0');
       return Number.isFinite(n) ? sum + n : sum;
     }, 0);
-  }, [selectedServices, serviceAmounts]);
+  }, [selectedServiceKeys, serviceAmounts]);
+
+  const apiVisitReady =
+    !useApiVisit ||
+    (!!visitId && !startingVisit && !visitStartError);
+
+  /** Staged files upload with visit submit; only block while visit start fails or is in flight */
+  const attachmentsLocked =
+    saving || (useApiVisit && (startingVisit || !!visitStartError));
+
+  const apiServicesReady =
+    !useApiVisit ||
+    (!catalogLoading &&
+      !catalogError &&
+      displayCatalog.length > 0);
 
   const canComplete =
     !!activePatient &&
     !!selectedDoctor &&
-    selectedServices.length > 0 &&
-    !saving;
+    selectedServiceKeys.length > 0 &&
+    !saving &&
+    apiVisitReady &&
+    apiServicesReady;
+
+  /** Shown under the CTA when something still blocks submit (visit id, services load, etc.). */
+  const completeVisitBlockHint = useMemo(() => {
+    if (canComplete || !activePatient) return null;
+    if (!selectedDoctor) return 'Select a doctor to continue.';
+    if (selectedServiceKeys.length === 0) {
+      return 'Select at least one service to continue.';
+    }
+    if (!useApiVisit) return null;
+    if (catalogLoading) return 'Loading clinic services…';
+    if (catalogError) return catalogError;
+    if (displayCatalog.length === 0) {
+      return 'No services available for this clinic.';
+    }
+    if (startingVisit) return 'Starting visit on the server…';
+    if (visitStartError) return visitStartError;
+    if (!visitId) {
+      return 'Visit session not ready yet. Wait a moment or pick the doctor again.';
+    }
+    return null;
+  }, [
+    canComplete,
+    activePatient,
+    selectedDoctor,
+    selectedServiceKeys.length,
+    useApiVisit,
+    catalogLoading,
+    catalogError,
+    displayCatalog.length,
+    startingVisit,
+    visitStartError,
+    visitId,
+  ]);
 
   async function onCompleteVisit() {
     if (!activePatient || !selectedDoctor) return;
+    if (useApiVisit && (!visitId || visitStartError || startingVisit)) {
+      return;
+    }
     setSaving(true);
+    setSavingOverlayMessage(
+      useApiVisit ? 'Preparing…' : 'Saving visit…',
+    );
     try {
-      const slipId = `VIS-${Date.now().toString(36).toUpperCase()}`;
+      let slipId: string;
+      let amountStr = totalAmount.toFixed(2);
+
+      if (useApiVisit && visitId) {
+        const stagedUploads = INTAKE_UPLOAD_ROWS.flatMap(({ category }) =>
+          assets[category].map((asset) => ({ category, asset })),
+        );
+        if (stagedUploads.length > 0) {
+          setSavingOverlayMessage('Uploading documents…');
+          for (const { category, asset } of stagedUploads) {
+            await uploadClinicVisitDocument(
+              visitId,
+              {
+                uri: asset.uri,
+                name: asset.name ?? 'upload',
+                type: asset.mimeType ?? undefined,
+              },
+              mapIntakeCategoryToVisitDocumentType(category),
+            );
+          }
+        }
+
+        setSavingOverlayMessage('Submitting visit…');
+        const orderedIds = displayCatalog
+          .map((s) => s.id)
+          .filter((id) => selectedServiceKeys.includes(`c:${id}`));
+        const amountsById: Record<number, string> = {};
+        for (const id of orderedIds) {
+          amountsById[id] = serviceAmounts[`c:${id}`] ?? '';
+        }
+        const lines = buildSubmitLinesFromCatalog(
+          orderedIds,
+          amountsById,
+          displayCatalog,
+          selectedDoctor.id,
+          { omitClinicServiceIds: usingMockCatalog },
+        );
+        const submitRes = await submitClinicVisit(visitId, lines, false);
+        slipId = submitRes.claim_number;
+        const tc = submitRes.total_claimed;
+        if (tc != null && tc !== '') {
+          amountStr =
+            typeof tc === 'number' ? tc.toFixed(2) : String(tc);
+        }
+      } else {
+        slipId = `VIS-${Date.now().toString(36).toUpperCase()}`;
+      }
+
+      setSavingOverlayMessage('Finishing…');
       const clinicName = clinic?.name?.trim() || 'Clinic';
-      const amountStr = totalAmount.toFixed(2);
-      const services = [...selectedServices];
+      const services = selectionKeysToServiceLabels(
+        selectedServiceKeys,
+        displayCatalog,
+      );
       const symptomsStr = symptoms.trim();
 
       setVisitSession({
@@ -390,9 +737,11 @@ export default function PatientIntakeVisitScreen() {
       });
 
       const serviceAmountsSnapshot: Record<string, string> = {};
-      for (const s of services) {
-        const v = serviceAmounts[s];
-        if (v != null && v !== '') serviceAmountsSnapshot[s] = v;
+      for (let i = 0; i < selectedServiceKeys.length; i++) {
+        const key = selectedServiceKeys[i];
+        const label = services[i] ?? key;
+        const v = serviceAmounts[key];
+        if (v != null && v !== '') serviceAmountsSnapshot[label] = v;
       }
 
       const attachments = INTAKE_UPLOAD_ROWS.map(({ category }) => ({
@@ -435,38 +784,34 @@ export default function PatientIntakeVisitScreen() {
         });
         pdfUri = uri;
       } catch {
-        /* PDF optional — claim still opens */
+        /* PDF optional */
       }
 
-      setDraft({
-        opdRef: slipId,
-        pdfUri,
-        patientId: activePatient.id,
-        patientName: activePatient.name,
-        patientCardNumber: activePatient.cardNumber,
-        department: selectedDoctor.department,
-        doctorName: selectedDoctor.name,
-        services,
-        amount: amountStr,
-        symptoms: symptomsStr,
-      });
-
-      await composeAdminVisitApprovalEmail({
-        slipId,
-        patientName: activePatient.name,
-        pdfUri,
-      });
-
-      router.push('/claim' as Href);
+      if (useApiVisit) {
+        clearHandoff();
+      }
+      clearVisitSession();
+      clearActivePatient();
+      router.replace('/patient-intake' as Href);
       requestAnimationFrame(() => {
-        showSuccess('Visit saved successfully.');
+        showSuccess(
+          useApiVisit
+            ? `Visit submitted · Ref ${slipId}`
+            : `Visit saved locally · ${slipId}`,
+        );
       });
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : 'Could not save visit.');
     } finally {
       setSaving(false);
     }
   }
 
   if (!activePatient) {
+    return <Redirect href="/patient-intake" />;
+  }
+
+  if (useApiVisit && !handoff) {
     return <Redirect href="/patient-intake" />;
   }
 
@@ -486,14 +831,17 @@ export default function PatientIntakeVisitScreen() {
           showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
             <Text variant="labelLarge" style={styles.heroKicker}>
-              Step 2 · Visit &amp; billing
+              Step 2 · Services &amp; documents
             </Text>
             <Text variant="headlineSmall" style={styles.heroTitle}>
               Record this visit
             </Text>
             <Text variant="bodyMedium" style={styles.intro}>
-              Choose doctor and services, enter the bill amount, add files if
-              needed, then continue to claim.
+              {visitFromHandoff
+                ? 'Doctor is set from Step 1. Choose services and amounts, add visit notes, attach files if needed, then submit the visit.'
+                : useApiVisit
+                  ? 'Choose doctor and services, add notes and documents, then submit the visit on the server.'
+                  : 'Choose doctor and services, enter amounts, add notes and optional documents, then save the visit.'}
             </Text>
           </View>
 
@@ -518,79 +866,125 @@ export default function PatientIntakeVisitScreen() {
               <Text variant="titleMedium" style={styles.cardTitle}>
                 Doctor &amp; department
               </Text>
-              {doctorsQuery.isPending && !doctorsQuery.data ? (
-                <Text variant="bodySmall">Loading doctors…</Text>
-              ) : doctorsQuery.isError ? (
-                <Text variant="bodySmall" style={styles.errorText}>
-                  Could not load doctors. Pull to retry from roster, or continue
-                  with cached data if shown.
-                </Text>
-              ) : null}
-
-              <Text variant="labelLarge" style={styles.fieldLabel}>
-                Department
-              </Text>
-              <Menu
-                visible={deptMenuOpen}
-                onDismiss={() => setDeptMenuOpen(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setDeptMenuOpen(true)}
-                    disabled={saving || departments.length === 0}
-                    style={[styles.menuBtn, styles.menuBtnRaised]}
-                    contentStyle={styles.menuBtnContent}>
-                    {department ?? 'Choose department'}
-                  </Button>
-                }>
-                {departments.map((d) => (
-                  <Menu.Item
-                    key={d}
-                    title={d}
-                    onPress={() => {
-                      setDepartment(d);
-                      setDeptMenuOpen(false);
-                    }}
-                  />
-                ))}
-              </Menu>
-
-              <Text variant="labelLarge" style={[styles.fieldLabel, styles.mt]}>
-                Doctor
-              </Text>
-              {!department ? (
-                <HelperText type="info" visible>
-                  Select a department to see doctors.
-                </HelperText>
-              ) : doctorsInDept.length === 0 ? (
-                <HelperText type="info" visible>
-                  No doctors listed for this department.
-                </HelperText>
+              {visitFromHandoff ? (
+                <View>
+                  <Text variant="titleSmall">
+                    {selectedDoctor?.name ?? '—'}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.muted}>
+                    {selectedDoctor?.department ?? ''}
+                  </Text>
+                  {visitId != null ? (
+                    <Text variant="labelSmall" style={styles.muted}>
+                      Visit #{visitId}
+                    </Text>
+                  ) : null}
+                </View>
               ) : (
-                <View style={styles.doctorRadioCard}>
-                  <RadioButton.Group
-                    value={
-                      selectedDoctor
-                        ? String(selectedDoctor.id)
-                        : ''
-                    }
-                    onValueChange={(value) => {
-                      const id = Number(value);
-                      const next = doctorsInDept.find((doc) => doc.id === id);
-                      if (next) setSelectedDoctor(next);
-                    }}>
-                    {doctorsInDept.map((d) => (
-                      <RadioButton.Item
-                        key={d.id}
-                        value={String(d.id)}
-                        label={`${d.name}${d.available ? '' : ' (off roster)'} · ${d.timing}`}
-                        position="leading"
-                        style={styles.radioItem}
+                <>
+                  {doctorsQuery.isPending && !doctorsQuery.data ? (
+                    <Text variant="bodySmall">Loading doctors…</Text>
+                  ) : doctorsQuery.isError ? (
+                    <Text variant="bodySmall" style={styles.errorText}>
+                      Could not load doctors. Pull to retry from roster, or
+                      continue with cached data if shown.
+                    </Text>
+                  ) : null}
+
+                  <Text variant="labelLarge" style={styles.fieldLabel}>
+                    Department
+                  </Text>
+                  <Menu
+                    visible={deptMenuOpen}
+                    onDismiss={() => setDeptMenuOpen(false)}
+                    anchor={
+                      <Button
+                        mode="outlined"
+                        onPress={() => setDeptMenuOpen(true)}
+                        disabled={saving || departments.length === 0}
+                        style={[styles.menuBtn, styles.menuBtnRaised]}
+                        contentStyle={styles.menuBtnContent}>
+                        {department ?? 'Choose department'}
+                      </Button>
+                    }>
+                    {departments.map((d) => (
+                      <Menu.Item
+                        key={d}
+                        title={d}
+                        onPress={() => {
+                          setDepartment(d);
+                          setDeptMenuOpen(false);
+                        }}
                       />
                     ))}
-                  </RadioButton.Group>
-                </View>
+                  </Menu>
+
+                  <Text
+                    variant="labelLarge"
+                    style={[styles.fieldLabel, styles.mt]}>
+                    Doctor
+                  </Text>
+                  {!department ? (
+                    <HelperText type="info" visible>
+                      Select a department to see doctors.
+                    </HelperText>
+                  ) : doctorsInDept.length === 0 ? (
+                    <HelperText type="info" visible>
+                      No doctors listed for this department.
+                    </HelperText>
+                  ) : (
+                    <View style={styles.doctorRadioCard}>
+                      <RadioButton.Group
+                        value={
+                          selectedDoctor ? String(selectedDoctor.id) : ''
+                        }
+                        onValueChange={(value) => {
+                          const id = Number(value);
+                          const next = doctorsInDept.find(
+                            (doc) => doc.id === id,
+                          );
+                          if (next) setSelectedDoctor(next);
+                        }}>
+                        {doctorsInDept.map((d) => (
+                          <RadioButton.Item
+                            key={d.id}
+                            value={String(d.id)}
+                            label={`${d.name}${d.available ? '' : ' (off roster)'} · ${d.timing}`}
+                            position="leading"
+                            style={styles.radioItem}
+                          />
+                        ))}
+                      </RadioButton.Group>
+                    </View>
+                  )}
+                  {useApiVisit && startingVisit ? (
+                    <View style={styles.visitSyncRow}>
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primary}
+                      />
+                      <Text variant="bodySmall" style={styles.muted}>
+                        Starting visit…
+                      </Text>
+                    </View>
+                  ) : null}
+                  {useApiVisit && visitStartError ? (
+                    <HelperText type="error" visible>
+                      {visitStartError}
+                    </HelperText>
+                  ) : null}
+                </>
               )}
+              {useApiVisit &&
+              visitMeta?.concession &&
+              typeof (visitMeta.concession as { applicable?: unknown })
+                .applicable === 'boolean' &&
+              (visitMeta.concession as { applicable: boolean }).applicable ? (
+                <HelperText type="info" visible>
+                  {(visitMeta.concession as { message?: string }).message ??
+                    'Revisit concession is tracked for this patient; submit uses apply_concession false until enabled.'}
+                </HelperText>
+              ) : null}
             </Card.Content>
           </Card>
 
@@ -600,55 +994,108 @@ export default function PatientIntakeVisitScreen() {
                 Services
               </Text>
               <Text variant="bodySmall" style={styles.muted}>
-                Tap to add or remove. Enter amount for each selected service.
+                {useApiVisit
+                  ? 'Services come from your clinic catalogue. Tap to add or remove; amounts default to list prices where set.'
+                  : 'Tap to add or remove. Enter amount for each selected service.'}
               </Text>
+              {useApiVisit && catalogLoading ? (
+                <Text variant="bodySmall" style={styles.muted}>
+                  Loading services…
+                </Text>
+              ) : null}
+              {useApiVisit && catalogError ? (
+                <HelperText type="error" visible>
+                  {catalogError}
+                </HelperText>
+              ) : null}
+              {useApiVisit &&
+              !catalogLoading &&
+              !catalogError &&
+              apiReturnedEmptyServices ? (
+                <>
+                  <HelperText type="error" visible style={styles.servicesEmpty}>
+                    No services found for this clinic.
+                  </HelperText>
+                  {usingMockCatalog ? (
+                    <HelperText type="info" visible style={styles.servicesMockHint}>
+                      Sample services below are shown because the API returned no
+                      rows. Configure real services in clinic setup for production;
+                      you can still try Submit visit (submit may fail if
+                      IDs do not exist on the server).
+                    </HelperText>
+                  ) : (
+                    <HelperText type="info" visible>
+                      Complete clinic setup with at least one active service, then
+                      refresh this screen.
+                    </HelperText>
+                  )}
+                </>
+              ) : null}
               <View style={styles.chipWrap}>
-                {DEFAULT_VISIT_SERVICES.map((name) => (
+                {serviceChipRows.map(({ key, label }) => (
                   <Chip
-                    key={name}
+                    key={key}
                     mode="flat"
-                    selected={selectedServices.includes(name)}
-                    onPress={() => toggleService(name)}
+                    selected={selectedServiceKeys.includes(key)}
+                    onPress={() => {
+                      const row = serviceChipRows.find((r) => r.key === key);
+                      toggleServiceKey(key, row?.listPrice);
+                    }}
                     style={[
                       styles.chip,
-                      selectedServices.includes(name) && styles.chipSelected,
+                      selectedServiceKeys.includes(key) && styles.chipSelected,
                     ]}
                     textStyle={
-                      selectedServices.includes(name)
+                      selectedServiceKeys.includes(key)
                         ? styles.chipTextSelected
                         : styles.chipText
                     }>
-                    {name}
+                    {label}
                   </Chip>
                 ))}
               </View>
-              {selectedServices.length === 0 ? (
+              {selectedServiceKeys.length === 0 ? (
                 <HelperText type="info" visible>
                   Select at least one service to continue.
                 </HelperText>
               ) : null}
-              {selectedServices.length > 0 ? (
+              {selectedServiceKeys.length > 0 ? (
                 <View style={styles.serviceBillingBlock}>
                   <Text variant="labelLarge" style={styles.fieldLabel}>
                     Service billing
                   </Text>
-                  {selectedServices.map((service) => (
-                    <View key={service} style={styles.serviceAmountRow}>
-                      <Text variant="bodyMedium" style={styles.serviceAmountLabel}>
-                        {service}
-                      </Text>
-                      <TextInput
-                        label="Amount (₹)"
-                        value={serviceAmounts[service] ?? ''}
-                        onChangeText={(v) => setAmountForService(service, v)}
-                        mode="outlined"
-                        {...inputFocusProps}
-                        keyboardType="decimal-pad"
-                        style={styles.serviceAmountInput}
-                        disabled={saving}
-                      />
-                    </View>
-                  ))}
+                  {selectedServiceKeys.map((key) => {
+                    const label =
+                      selectionKeysToServiceLabels([key], displayCatalog)[0] ??
+                      key;
+                    const consult = isConsultationServiceKey(
+                      key,
+                      displayCatalog,
+                    );
+                    return (
+                      <View key={key} style={styles.serviceAmountRow}>
+                        <Text variant="bodyMedium" style={styles.serviceAmountLabel}>
+                          {label}
+                        </Text>
+                        <TextInput
+                          label="Amount (₹)"
+                          value={serviceAmounts[key] ?? ''}
+                          onChangeText={(v) => setAmountForServiceKey(key, v)}
+                          mode="outlined"
+                          {...inputFocusProps}
+                          keyboardType="decimal-pad"
+                          style={styles.serviceAmountInput}
+                          disabled={saving}
+                        />
+                        {consult ? (
+                          <HelperText type="info" visible padding="normal">
+                            Claimed consultation fee follows this doctor or your
+                            clinic default — the amount above is for reference only.
+                          </HelperText>
+                        ) : null}
+                      </View>
+                    );
+                  })}
                   <View style={styles.totalRow}>
                     <Text variant="titleSmall" style={styles.totalLabel}>
                       Total
@@ -684,11 +1131,12 @@ export default function PatientIntakeVisitScreen() {
           <Card style={[clinicScreen.card, styles.card, styles.sectionCard]} mode="elevated">
             <Card.Content>
               <Text variant="titleMedium" style={styles.cardTitle}>
-                Files (optional)
+                Documents (optional)
               </Text>
               <Text variant="bodySmall" style={styles.muted}>
-                Photos appear below each row. In the camera, use Use photo then
-                Done when finished.
+                {useApiVisit
+                  ? 'Attach files if needed; they are uploaded to your visit when you submit.'
+                  : 'Photos appear below each row; in the camera, use Use photo then Done when finished.'}
               </Text>
               {INTAKE_UPLOAD_ROWS.map(({ category, label, icon }) => (
                 <IntakeAttachmentRow
@@ -696,9 +1144,10 @@ export default function PatientIntakeVisitScreen() {
                   label={label}
                   icon={icon}
                   assets={assets[category]}
-                  disabled={saving}
+                  disabled={attachmentsLocked}
                   busy={
-                    upload.isPending && upload.variables?.category === category
+                    upload.isPending &&
+                    upload.variables?.category === category
                   }
                   showCamera={showCamera}
                   onPickDocument={() => void onPickDocument(category)}
@@ -712,6 +1161,14 @@ export default function PatientIntakeVisitScreen() {
             </Card.Content>
           </Card>
 
+          {completeVisitBlockHint ? (
+            <HelperText
+              type={visitStartError ? 'error' : 'info'}
+              visible
+              style={styles.completeHint}>
+              {completeVisitBlockHint}
+            </HelperText>
+          ) : null}
           <Button
             mode="contained"
             onPress={() => void onCompleteVisit()}
@@ -719,12 +1176,15 @@ export default function PatientIntakeVisitScreen() {
             disabled={!canComplete}
             style={[clinicScreen.button, styles.completeCta]}
             contentStyle={clinicScreen.buttonContent}>
-            Complete visit &amp; open claim
+            Submit visit
           </Button>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <LoadingOverlay visible={saving} message="Saving visit…" />
+      <LoadingOverlay
+        visible={saving}
+        message={savingOverlayMessage || 'Saving visit…'}
+      />
 
       <ClaimCameraModal
         visible={cameraCategory != null}
@@ -791,6 +1251,12 @@ const styles = StyleSheet.create({
   },
   patientText: { flex: 1, minWidth: 0 },
   muted: { color: colors.textMuted, marginTop: 4 },
+  visitSyncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
   cardTitle: {
     ...typography.title,
     marginBottom: spacing.md,
@@ -808,6 +1274,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  servicesEmpty: {
+    marginTop: spacing.xs,
+  },
+  servicesMockHint: {
+    marginTop: 2,
+    marginBottom: spacing.xs,
   },
   chip: { marginBottom: 0, backgroundColor: colors.surfaceVariant },
   chipSelected: { backgroundColor: colors.primary },
@@ -847,6 +1320,10 @@ const styles = StyleSheet.create({
   totalValue: {
     color: colors.secondary,
     fontWeight: '700',
+  },
+  completeHint: {
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
   },
   completeCta: { marginTop: spacing.sm, borderRadius: radii.button },
   input: { marginBottom: spacing.md, backgroundColor: colors.surface },

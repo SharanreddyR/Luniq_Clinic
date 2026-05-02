@@ -13,6 +13,24 @@ export type ClinicTimingSnapshot = {
   isOpen: boolean;
 };
 
+/** One row from GET /clinic/profile → data.clinic_profile.timings */
+export type ClinicWeeklySlot = {
+  day: string;
+  opensAt: string;
+  closesAt: string;
+  isClosed: boolean;
+};
+
+const WEEK_DAY_ORDER: Record<string, number> = {
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+  sunday: 7,
+};
+
 const TIMING_READ_ENDPOINTS = [
   '/admin/clinic-timings',
   '/clinic/clinic-timings',
@@ -66,6 +84,63 @@ function normalizeTiming(data: unknown): ClinicTimingSnapshot | null {
   const isOpen = pickBoolean(o, ['is_open', 'isOpen', 'open', 'status']);
   if (!openTime || !closeTime || isOpen == null) return null;
   return { openTime, closeTime, isOpen };
+}
+
+function parseWeeklyTimingsPayload(payload: unknown): ClinicWeeklySlot[] | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const u = payload as Record<string, unknown>;
+  const cp = u.clinic_profile;
+  if (!cp || typeof cp !== 'object') return null;
+  const timings = (cp as Record<string, unknown>).timings;
+  if (!Array.isArray(timings)) return null;
+
+  const slots: ClinicWeeklySlot[] = [];
+  for (const row of timings) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === 'string' ? r.day.trim() : '';
+    if (!day) continue;
+    const opensAt = typeof r.opens_at === 'string' ? r.opens_at : '';
+    const closesAt = typeof r.closes_at === 'string' ? r.closes_at : '';
+    const isClosed =
+      r.is_closed === true ||
+      r.is_closed === 1 ||
+      r.is_closed === '1';
+    slots.push({ day, opensAt, closesAt, isClosed });
+  }
+
+  if (slots.length === 0) return null;
+
+  slots.sort(
+    (a, b) =>
+      (WEEK_DAY_ORDER[a.day.toLowerCase()] ?? 99) -
+      (WEEK_DAY_ORDER[b.day.toLowerCase()] ?? 99),
+  );
+  return slots;
+}
+
+/**
+ * Weekly Mon–Sun hours from clinic profile (same source as Filament / admin setup).
+ */
+export async function fetchWeeklyTimingsFromProfile(): Promise<
+  ClinicWeeklySlot[] | null
+> {
+  try {
+    const { data } = await api.get<{
+      success?: boolean;
+      data?: unknown;
+    }>('/clinic/profile');
+    const inner =
+      data &&
+      typeof data === 'object' &&
+      'data' in data &&
+      (data as { data: unknown }).data != null
+        ? (data as { data: unknown }).data
+        : data;
+    return parseWeeklyTimingsPayload(inner);
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchClinicTiming(): Promise<ClinicTimingSnapshot | null> {

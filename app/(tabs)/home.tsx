@@ -1,10 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar, Button, Card, Text } from 'react-native-paper';
+
+import { NotificationsSheet } from '@/components/notifications/NotificationsSheet';
+import { useNotificationsInfinite } from '@/hooks/useNotifications';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -116,9 +120,29 @@ function daypartMeta(now = new Date()): {
 export default function ClinicDashboardScreen() {
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const activePatient = usePatientStore((s) => s.activePatient);
   const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
   const visitRecords = useVisitHistoryStore((s) => s.visits);
+
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsQuery = useNotificationsInfinite(20);
+  const refetchNotifications = notificationsQuery.refetch;
+
+  const unreadNotifications =
+    notificationsQuery.data?.pages[0]?.unread_count ?? 0;
+
+  useEffect(() => {
+    if (!notificationsOpen || !token) return;
+    void refetchNotifications();
+  }, [notificationsOpen, token, refetchNotifications]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      void refetchNotifications();
+    }, [token, refetchNotifications]),
+  );
 
   const distinctVisitPatients = useMemo(() => {
     const keys = new Set<string>();
@@ -197,12 +221,33 @@ export default function ClinicDashboardScreen() {
                 )}
               </View>
               <View style={styles.headerActions}>
-                <Pressable style={styles.notifyBtn} accessibilityRole="button">
-                  <MaterialCommunityIcons
-                    name="bell-outline"
-                    size={20}
-                    color={colors.secondary}
-                  />
+                <Pressable
+                  style={styles.notifyWrap}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    unreadNotifications > 0
+                      ? `Notifications, ${unreadNotifications} unread`
+                      : 'Notifications'
+                  }
+                  hitSlop={8}
+                  disabled={!token}
+                  onPress={() => setNotificationsOpen(true)}>
+                  <View style={styles.notifyBtn}>
+                    <MaterialCommunityIcons
+                      name="bell-outline"
+                      size={20}
+                      color={token ? colors.secondary : colors.textMuted}
+                    />
+                  </View>
+                  {token && unreadNotifications > 0 ? (
+                    <View style={styles.notifyBadge}>
+                      <Text variant="labelSmall" style={styles.notifyBadgeText}>
+                        {unreadNotifications > 99
+                          ? '99+'
+                          : String(unreadNotifications)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
                 <Pressable
                   onPress={goProfile}
@@ -219,6 +264,11 @@ export default function ClinicDashboardScreen() {
             </View>
           </View>
         </LinearGradient>
+
+        <NotificationsSheet
+          visible={notificationsOpen}
+          onDismiss={() => setNotificationsOpen(false)}
+        />
 
         <View style={[clinicScreen.screenPadding, styles.body]}>
           <View style={styles.sectionHeadInline}>
@@ -440,6 +490,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  notifyWrap: {
+    position: 'relative',
+  },
   notifyBtn: {
     width: 44,
     height: 44,
@@ -452,6 +505,28 @@ const styles = StyleSheet.create({
     ...shadows.card,
     shadowOpacity: 0.06,
     elevation: 2,
+  },
+  notifyBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notifyBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 10,
+    lineHeight: 12,
+    marginVertical: 0,
+    marginHorizontal: 0,
   },
   body: {
     paddingTop: 0,

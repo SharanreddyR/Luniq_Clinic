@@ -1,7 +1,9 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { DocumentPickerAsset } from 'expo-document-picker';
 import { router, type Href } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,16 +18,79 @@ import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
+import { INTAKE_UPLOAD_ROWS } from '@/constants/intakeUploads';
+import { useAppToast } from '@/hooks/useAppToast';
 import { useSubmitClaim } from '@/hooks/useSubmitClaim';
-import type { ClaimPatientOption } from '@/services/claimService';
+import {
+  CLAIM_POST_VERIFICATION_MESSAGE,
+  type ClaimPatientOption,
+} from '@/services/claimService';
 import { pickDocument } from '@/services/uploadService';
 import {
+  type ClaimDraftStagedFile,
   type VisitClaimDraft,
   useClaimDraftStore,
   usePatientStore,
 } from '@/store';
 
 type CameraSlot = 'prescription' | 'reports' | 'bills' | null;
+
+const CLAIM_FALLBACK_PHOTO = 'https://via.placeholder.com/150';
+
+const EMPTY_INTAKE_ATTACHMENTS: NonNullable<
+  VisitClaimDraft['intakeAttachments']
+> = {
+  prescription: [],
+  report: [],
+  bill: [],
+};
+
+function countIntakeVisitFiles(
+  ia: NonNullable<VisitClaimDraft['intakeAttachments']>,
+): number {
+  return ia.prescription.length + ia.report.length + ia.bill.length;
+}
+
+function stagedFileToPickerAsset(f: ClaimDraftStagedFile): DocumentPickerAsset {
+  return {
+    uri: f.uri,
+    name: f.name ?? 'Document',
+    mimeType: f.mimeType ?? undefined,
+    lastModified: Date.now(),
+  };
+}
+
+function isImageLikeStagedFile(f: ClaimDraftStagedFile): boolean {
+  const mime = f.mimeType?.toLowerCase() ?? '';
+  if (mime.startsWith('image/')) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif)(\?|$)/i.test(f.uri);
+}
+
+function VisitIntakeThumb({ file }: { file: ClaimDraftStagedFile }) {
+  const imageLike = isImageLikeStagedFile(file);
+  return (
+    <View style={styles.visitIntakeThumb}>
+      {imageLike ? (
+        <Image
+          source={{ uri: file.uri }}
+          style={styles.visitIntakeThumbImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.visitIntakeThumbImage, styles.visitIntakeThumbDoc]}>
+          <MaterialCommunityIcons
+            name="file-document-outline"
+            size={26}
+            color={colors.primary}
+          />
+        </View>
+      )}
+      <Text variant="labelSmall" style={styles.visitIntakeThumbName} numberOfLines={2}>
+        {file.name ?? 'File'}
+      </Text>
+    </View>
+  );
+}
 
 function mergePatientOptions(
   draft: VisitClaimDraft | null,
@@ -131,8 +196,9 @@ export default function ClaimSubmissionScreen() {
   const draft = useClaimDraftStore((s) => s.draft);
   const clearDraft = useClaimDraftStore((s) => s.clearDraft);
   const activePatient = usePatientStore((s) => s.activePatient);
-  const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
+  const setActivePatient = usePatientStore((s) => s.setActivePatient);
   const clearVisitSession = usePatientStore((s) => s.clearVisitSession);
+  const { showSuccess } = useAppToast();
 
   const patientOptions = useMemo(
     () => mergePatientOptions(draft, activePatient),
@@ -166,13 +232,39 @@ export default function ClaimSubmissionScreen() {
     draftAppliedKey.current = key;
 
     setSelectedPatientId(draft.patientId);
-    if (draft.pdfUri) {
-      setReports({
-        uri: draft.pdfUri,
-        name: `Visit-summary-${draft.opdRef}.pdf`,
-        mimeType: 'application/pdf',
-        lastModified: Date.now(),
-      });
+
+    const ia = draft.intakeAttachments;
+    if (ia) {
+      const p0 = ia.prescription[0];
+      const r0 = ia.report[0];
+      const b0 = ia.bill[0];
+      setPrescription(p0 ? stagedFileToPickerAsset(p0) : null);
+      setBills(b0 ? stagedFileToPickerAsset(b0) : null);
+      if (r0) {
+        setReports(stagedFileToPickerAsset(r0));
+      } else if (draft.pdfUri) {
+        setReports({
+          uri: draft.pdfUri,
+          name: `Visit-summary-${draft.opdRef}.pdf`,
+          mimeType: 'application/pdf',
+          lastModified: Date.now(),
+        });
+      } else {
+        setReports(null);
+      }
+    } else {
+      setPrescription(null);
+      setBills(null);
+      if (draft.pdfUri) {
+        setReports({
+          uri: draft.pdfUri,
+          name: `Visit-summary-${draft.opdRef}.pdf`,
+          mimeType: 'application/pdf',
+          lastModified: Date.now(),
+        });
+      } else {
+        setReports(null);
+      }
     }
   }, [draft]);
 
@@ -194,6 +286,19 @@ export default function ClaimSubmissionScreen() {
 
   const canSubmit =
     selectedPatient != null && hasAttachment && !submit.isPending;
+
+  const intakeForReview = draft?.intakeAttachments ?? EMPTY_INTAKE_ATTACHMENTS;
+
+  const intakeVisitFileCount = useMemo(
+    () => countIntakeVisitFiles(intakeForReview),
+    [intakeForReview],
+  );
+
+  const hasVisitDocsOrPdf =
+    !!draft && (intakeVisitFileCount > 0 || !!draft.pdfUri);
+
+  const claimSlotFilledCount = [prescription, reports, bills].filter(Boolean)
+    .length;
 
   const showCamera = Platform.OS !== 'web';
 
@@ -217,15 +322,30 @@ export default function ClaimSubmissionScreen() {
         bills,
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
           clearDraft();
           draftAppliedKey.current = null;
           setPrescription(null);
           setReports(null);
           setBills(null);
-          clearActivePatient();
           clearVisitSession();
+          if (
+            !activePatient ||
+            activePatient.id !== selectedPatient.id
+          ) {
+            setActivePatient({
+              id: selectedPatient.id,
+              name: selectedPatient.name,
+              cardNumber: selectedPatient.cardNumber,
+              photo: CLAIM_FALLBACK_PHOTO,
+            });
+          }
           router.replace('/patient-intake' as Href);
+          requestAnimationFrame(() => {
+            showSuccess(
+              `Submitted · Claim ID ${data.claimId}. ${CLAIM_POST_VERIFICATION_MESSAGE}`,
+            );
+          });
         },
         onError: (err) => {
           setSubmitError(
@@ -265,7 +385,8 @@ export default function ClaimSubmissionScreen() {
                 Finalize claim package
               </Text>
               <Text variant="bodyMedium" style={styles.intro}>
-                Verify patient details and upload required documents for review.
+                Review the documents from the Visit step, confirm patient details,
+                then submit the claim when everything looks correct.
               </Text>
             <View style={styles.heroStatsRow}>
               <View style={styles.heroStatCard}>
@@ -281,7 +402,10 @@ export default function ClaimSubmissionScreen() {
                   Documents
                 </Text>
                 <Text variant="titleSmall" style={styles.heroStatValue}>
-                  {[prescription, reports, bills].filter(Boolean).length}/3 uploaded
+                  {claimSlotFilledCount}/3 claim slots
+                  {intakeVisitFileCount > 0
+                    ? ` · ${intakeVisitFileCount} from visit`
+                    : ''}
                 </Text>
               </View>
             </View>
@@ -306,6 +430,84 @@ export default function ClaimSubmissionScreen() {
                   <Text variant="bodySmall" style={styles.muted}>
                     {draft.services.join(' · ')}
                   </Text>
+                </Card.Content>
+              </Card>
+            ) : null}
+
+            {draft ? (
+              <Card
+                style={[clinicScreen.card, styles.visitReviewCard]}
+                mode="elevated">
+                <Card.Content style={styles.cardContent}>
+                  <View style={styles.sectionTitleRow}>
+                    <MaterialCommunityIcons
+                      name="clipboard-check-outline"
+                      size={22}
+                      color={colors.primary}
+                      style={styles.visitReviewIcon}
+                    />
+                    <Text variant="titleMedium" style={styles.cardTitle}>
+                      Documents from your visit
+                    </Text>
+                  </View>
+                  <Text variant="bodySmall" style={styles.visitReviewLead}>
+                    Quick check before you submit: these are the same files you added
+                    on the Visit screen. The claim uses one attachment per category in
+                    the next section (already filled for you when possible).
+                  </Text>
+                  {!hasVisitDocsOrPdf ? (
+                    <HelperText type="info" visible style={styles.visitReviewEmpty}>
+                      No prescription, report, or bill files were attached during the
+                      visit. Add at least one document in Claim attachments below to
+                      submit.
+                    </HelperText>
+                  ) : (
+                    <>
+                      {INTAKE_UPLOAD_ROWS.map(({ category, label }) => {
+                        const files = intakeForReview[category];
+                        if (!files.length) return null;
+                        return (
+                          <View key={category} style={styles.visitIntakeCategory}>
+                            <Text
+                              variant="labelLarge"
+                              style={styles.visitIntakeLabel}>
+                              {label}
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              nestedScrollEnabled
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.visitIntakeThumbRow}>
+                              {files.map((file, idx) => (
+                                <VisitIntakeThumb
+                                  key={`${category}-${file.uri}-${idx}`}
+                                  file={file}
+                                />
+                              ))}
+                            </ScrollView>
+                          </View>
+                        );
+                      })}
+                      {draft.pdfUri ? (
+                        <View style={styles.visitPdfBanner}>
+                          <MaterialCommunityIcons
+                            name="file-pdf-box"
+                            size={22}
+                            color="#B91C1C"
+                          />
+                          <View style={styles.visitPdfBannerText}>
+                            <Text variant="labelLarge" style={styles.visitPdfTitle}>
+                              Visit summary PDF
+                            </Text>
+                            <Text variant="bodySmall" style={styles.muted}>
+                              Included with this visit. It appears under Reports when
+                              you did not attach a separate lab/report image.
+                            </Text>
+                          </View>
+                        </View>
+                      ) : null}
+                    </>
+                  )}
                 </Card.Content>
               </Card>
             ) : null}
@@ -361,11 +563,13 @@ export default function ClaimSubmissionScreen() {
               <Card.Content style={styles.cardContent}>
                 <View style={styles.sectionTitleRow}>
                   <Text variant="titleMedium" style={styles.cardTitle}>
-                    Documents
+                    Claim attachments
                   </Text>
                 </View>
                 <Text variant="bodySmall" style={styles.muted}>
-                  Attach at least one item. Reports can include visit summary.
+                  These three slots are what gets sent when you tap Submit claim. They
+                  are prefilled from your visit files when possible — change a slot
+                  only if you need a different file.
                 </Text>
                 <View style={styles.attachMetaRow}>
                   <View style={[styles.attachMetaChip, styles.attachMetaChipDone]}>
@@ -565,6 +769,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     elevation: 0,
   },
+  visitReviewCard: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: '#F8FDFB',
+    marginBottom: spacing.xs,
+  },
+  visitReviewIcon: {
+    marginRight: spacing.xs,
+  },
+  visitReviewLead: {
+    ...typography.subtitle,
+    color: colors.secondary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  visitReviewEmpty: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
   summaryRefPill: {
     borderRadius: radii.pill,
     backgroundColor: '#EAF4FF',
@@ -721,6 +944,61 @@ const styles = StyleSheet.create({
   },
   attachHint: {
     marginTop: spacing.xs,
+  },
+  visitIntakeCategory: {
+    marginTop: spacing.md,
+  },
+  visitIntakeLabel: {
+    color: colors.secondary,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
+  visitIntakeThumbRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  visitIntakeThumb: {
+    width: 128,
+  },
+  visitIntakeThumbImage: {
+    width: 128,
+    height: 128,
+    borderRadius: radii.sm,
+    backgroundColor: '#EEF3F7',
+    borderWidth: 1,
+    borderColor: '#DCE8F0',
+    overflow: 'hidden',
+  },
+  visitIntakeThumbDoc: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  visitIntakeThumbName: {
+    marginTop: spacing.xs,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  visitPdfBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  visitPdfBannerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  visitPdfTitle: {
+    color: colors.secondary,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   submit: {
     borderRadius: radii.button + 2,

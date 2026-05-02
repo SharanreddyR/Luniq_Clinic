@@ -46,3 +46,13 @@ function resolveApiBaseUrl(): string {
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
+
+/**
+ * When GET /clinic/services returns no rows, show {@link MOCK_CLINIC_VISIT_CATALOG}
+ * so Visit chips can be exercised without backend data. Visit submit stays disabled
+ * until real services exist. On by default in dev; set `EXPO_PUBLIC_USE_MOCK_CLINIC_SERVICES=1`
+ * for release builds if needed.
+ */
+export const USE_MOCK_CLINIC_SERVICES_WHEN_EMPTY =
+  (typeof __DEV__ !== 'undefined' && __DEV__) ||
+  String(process.env.EXPO_PUBLIC_USE_MOCK_CLINIC_SERVICES ?? '').trim() === '1';

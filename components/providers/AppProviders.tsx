@@ -4,6 +4,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { clinicPaperTheme } from '@/constants';
+import { NotificationInboxListener } from '@/components/providers/NotificationInboxListener';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -26,7 +27,10 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <PaperProvider theme={clinicPaperTheme}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <NotificationInboxListener />
+            {children}
+          </ToastProvider>
         </PaperProvider>
       </SafeAreaProvider>
     </QueryClientProvider>

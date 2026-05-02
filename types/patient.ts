@@ -21,6 +21,8 @@ export type PatientMember = {
 /** GET /clinic/card/lookup?card_number=... */
 export type PatientRecord = {
   id: number;
+  /** `user_health_cards.id` — required for POST /clinic/visits/start */
+  healthCardId?: number;
   name: string;
   photo: string;
   cardNumber: string;

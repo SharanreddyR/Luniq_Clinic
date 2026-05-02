@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -22,8 +23,26 @@ import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
 import { useClinicTimingQuery } from '@/hooks/useClinicTimingQuery';
+import { useClinicWeeklyTimingsQuery } from '@/hooks/useClinicWeeklyTimingsQuery';
 import { useSaveClinicTiming } from '@/hooks/useSaveClinicTiming';
 import { useClinicSettingsStore } from '@/store';
+import type { ClinicWeeklySlot } from '@/services/clinicTimingService';
+
+function formatDayLabel(day: string): string {
+  const d = day.trim().toLowerCase();
+  if (!d) return day;
+  return d.charAt(0).toUpperCase() + d.slice(1);
+}
+
+/** Display HH:mm from `09:00:00` or `9:30`. */
+function formatClockHm(raw: string): string {
+  const s = raw.trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return s;
+  const h = Math.min(23, Math.max(0, Number(m[1])));
+  const min = Math.min(59, Math.max(0, Number(m[2])));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
 
 function isValidHm(value: string): boolean {
   const m = value.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -52,6 +71,7 @@ export default function ClinicSettingsScreen() {
 
   const saveTiming = useSaveClinicTiming();
   const timingQuery = useClinicTimingQuery();
+  const weeklyQuery = useClinicWeeklyTimingsQuery();
   const { showSuccess, showError } = useAppToast();
   const hydratedFromServer = useRef(false);
 
@@ -108,14 +128,52 @@ export default function ClinicSettingsScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <Text variant="bodyMedium" style={styles.intro}>
-            Hours and open/closed status sync from clinic/admin timing routes
-            and save back to the server when you tap Save.
+            Weekly hours shown below come from your clinic profile (Monday–Sunday).
+            Quick open/close times sync from timing routes when you tap Save.
           </Text>
           {!timingQuery.isFetching && !timingQuery.data ? (
             <Text variant="bodySmall" style={styles.notFoundText}>
               Data not found.
             </Text>
           ) : null}
+
+          <Card style={[clinicScreen.card, styles.card, styles.weekCard]} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.cardTitle}>
+                Weekly hours (profile)
+              </Text>
+              <Text variant="bodySmall" style={styles.muted}>
+                Set in admin / onboarding; pulled from GET /clinic/profile.
+              </Text>
+              {weeklyQuery.isPending ? (
+                <View style={styles.weekLoading}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : weeklyQuery.data && weeklyQuery.data.length > 0 ? (
+                weeklyQuery.data.map((slot: ClinicWeeklySlot) => (
+                  <View key={slot.day} style={styles.weekRow}>
+                    <Text variant="labelLarge" style={styles.weekDay}>
+                      {formatDayLabel(slot.day)}
+                    </Text>
+                    <Text
+                      variant="bodyMedium"
+                      style={
+                        slot.isClosed ? styles.weekHoursClosed : styles.weekHours
+                      }>
+                      {slot.isClosed
+                        ? 'Closed'
+                        : `${formatClockHm(slot.opensAt)} – ${formatClockHm(slot.closesAt)}`}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text variant="bodySmall" style={styles.weekEmpty}>
+                  No weekly schedule in profile yet. Complete clinic setup or add
+                  timings in admin.
+                </Text>
+              )}
+            </Card.Content>
+          </Card>
 
           <Card style={[clinicScreen.card, styles.card]} mode="elevated">
             <Card.Content>
@@ -222,7 +280,46 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   card: {
-    marginBottom: 0,
+    marginBottom: spacing.md,
+  },
+  weekCard: {
+    marginBottom: spacing.md,
+  },
+  weekLoading: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  weekDay: {
+    color: colors.secondary,
+    fontWeight: '700',
+    width: '36%',
+  },
+  weekHours: {
+    flex: 1,
+    textAlign: 'right',
+    color: colors.text,
+    fontWeight: '600',
+  },
+  weekHoursClosed: {
+    flex: 1,
+    textAlign: 'right',
+    color: colors.textMuted,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  weekEmpty: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    lineHeight: 20,
   },
   cardTitle: {
     ...typography.title,

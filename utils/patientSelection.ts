@@ -17,8 +17,16 @@ export function memberToActiveRecord(
   base: PatientRecord,
   member: PatientMember,
 ): PatientRecord {
+  const personId =
+    typeof member.personId === 'number' && Number.isFinite(member.personId)
+      ? member.personId
+      : typeof member.id === 'number' && Number.isFinite(member.id)
+        ? member.id
+        : base.id;
+
   return {
     ...base,
+    id: personId,
     name: member.name,
     photo: member.photo,
     mobile: member.mobile,

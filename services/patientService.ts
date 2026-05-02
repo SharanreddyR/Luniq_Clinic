@@ -25,7 +25,11 @@ type ApiLookupMember = {
 const PLACEHOLDER_PHOTO = 'https://via.placeholder.com/150';
 
 /** Turn API `photo_url` / `photo` into a URI React Native `Image` can load. */
-function resolveMemberPhotoUri(photoUrl?: string, photo?: string): string {
+export function resolveMemberPhotoUri(photoUrl?: string, photo?: string): string {
+  const pDirect = typeof photo === 'string' ? photo.trim() : '';
+  if (/^https?:\/\//i.test(pDirect)) {
+    return pDirect;
+  }
   const candidates = [photoUrl, photo];
   for (const raw of candidates) {
     if (typeof raw !== 'string') continue;
@@ -45,6 +49,7 @@ function resolveMemberPhotoUri(photoUrl?: string, photo?: string): string {
 }
 
 type ApiLookupData = {
+  card_id?: number;
   card_number?: string;
   status?: string;
   is_valid?: boolean;
@@ -94,6 +99,10 @@ function normalizeLookupResponse(data: ApiLookupData): PatientRecord {
 
   return {
     id: primary.personId ?? primary.id ?? 0,
+    healthCardId:
+      typeof data.card_id === 'number' && Number.isFinite(data.card_id)
+        ? data.card_id
+        : undefined,
     name: primary.name,
     photo: primary.photo,
     cardNumber:
