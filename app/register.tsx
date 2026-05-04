@@ -27,10 +27,10 @@ import { clinicScreen, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicApplicationMutation } from '@/hooks/useClinicApplicationMutation';
 import {
-  isValidApplicationPhone,
+  isValidClinicRegistrationPhone,
   isValidEmail,
   isValidPincode,
-  normalizePhoneDigits,
+  normalizeClinicRegistrationPhone,
 } from '@/utils/validation';
 
 const MAX_LICENSE_BYTES = 5 * 1024 * 1024;
@@ -75,7 +75,10 @@ export default function RegisterScreen() {
     licenseAsset,
   ]);
 
-  const phoneDigits = useMemo(() => normalizePhoneDigits(phone), [phone]);
+  const phoneDigits = useMemo(
+    () => normalizeClinicRegistrationPhone(phone),
+    [phone],
+  );
 
   const clinicNameError =
     clinicName.length > 0 && clinicName.trim().length < 2
@@ -86,8 +89,8 @@ export default function RegisterScreen() {
       ? 'Enter the owner or contact name'
       : '';
   const phoneError =
-    phone.length > 0 && !isValidApplicationPhone(phoneDigits)
-      ? 'Enter a valid phone number (10–15 digits)'
+    phone.length > 0 && !isValidClinicRegistrationPhone(phoneDigits)
+      ? 'Enter exactly 10 digits (mobile number)'
       : '';
   const emailError =
     email.length > 0 && !isValidEmail(email) ? 'Enter a valid email' : '';
@@ -111,7 +114,7 @@ export default function RegisterScreen() {
   const formValid =
     clinicName.trim().length >= 2 &&
     ownerName.trim().length >= 2 &&
-    isValidApplicationPhone(phoneDigits) &&
+    isValidClinicRegistrationPhone(phoneDigits) &&
     (email.trim().length === 0 || isValidEmail(email)) &&
     licenseNumber.trim().length >= 2 &&
     address.trim().length >= 10 &&
@@ -262,7 +265,9 @@ export default function RegisterScreen() {
                 dense
                 label="Phone *"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(t) =>
+                  setPhone(normalizeClinicRegistrationPhone(t))
+                }
                 keyboardType="phone-pad"
                 autoComplete="tel"
                 style={styles.inputSpaced}

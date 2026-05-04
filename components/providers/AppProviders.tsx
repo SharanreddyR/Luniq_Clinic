@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { clinicPaperTheme } from '@/constants';
 import { NotificationInboxListener } from '@/components/providers/NotificationInboxListener';
+import { PushNotificationBootstrap } from '@/components/providers/PushNotificationBootstrap';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -29,6 +30,7 @@ export function AppProviders({ children }: PropsWithChildren) {
         <PaperProvider theme={clinicPaperTheme}>
           <ToastProvider>
             <NotificationInboxListener />
+            <PushNotificationBootstrap />
             {children}
           </ToastProvider>
         </PaperProvider>

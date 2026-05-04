@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, TextInput } from 'react-native-paper';
 
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
@@ -8,6 +8,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
+import { LOGIN_INVALID_CREDENTIALS_MESSAGE } from '@/services/authService';
 import { isValidPhoneOrEmail } from '@/utils';
 
 const SCROLL_TOP_PADDING = 20;
@@ -16,7 +17,6 @@ export default function LoginScreen() {
   const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const authScrollRef = useRef<ScrollView>(null);
   const passwordBlockY = useRef(0);
@@ -39,12 +39,11 @@ export default function LoginScreen() {
 
   useEffect(() => {
     login.reset();
-    setSubmitError(null);
   }, [phoneOrEmail, password]);
 
   const identifierError =
     phoneOrEmail.length > 0 && !isValidPhoneOrEmail(phoneOrEmail)
-      ? 'Enter a valid email or phone number (10+ digits)'
+      ? 'Enter a valid email or a 10-digit phone number'
       : '';
 
   const canSubmit =
@@ -54,7 +53,6 @@ export default function LoginScreen() {
 
   function onSubmit() {
     if (!canSubmit) return;
-    setSubmitError(null);
     login.mutate(
       { phoneOrEmail: phoneOrEmail.trim(), password },
       {
@@ -65,13 +63,26 @@ export default function LoginScreen() {
           const msg =
             err instanceof Error ? err.message : 'Sign-in failed. Try again.';
           const lower = msg.toLowerCase();
+          const isDeactivated = lower.includes('deactivated');
           const isCredentialFailure =
+            msg === LOGIN_INVALID_CREDENTIALS_MESSAGE ||
             lower.includes('invalid credential') ||
             lower.includes('unauthenticated') ||
-            lower.includes('credentials do not match');
-          setSubmitError(
-            isCredentialFailure ? 'Invalid credentials. Retry again.' : msg,
-          );
+            lower.includes('credentials do not match') ||
+            lower.includes('validation failed') ||
+            /something went wrong|went wrong.*try again/i.test(msg);
+          if (isDeactivated) {
+            Alert.alert('Unable to sign in', msg);
+            return;
+          }
+          if (isCredentialFailure) {
+            Alert.alert(
+              LOGIN_INVALID_CREDENTIALS_MESSAGE,
+              'Please check your email or password and try again.',
+            );
+            return;
+          }
+          Alert.alert('Sign-in failed', msg);
         },
       },
     );
@@ -135,12 +146,6 @@ export default function LoginScreen() {
         />
       </View>
 
-      {submitError ? (
-        <HelperText type="error" visible style={styles.submitError}>
-          {submitError}
-        </HelperText>
-      ) : null}
-
       <Button
         mode="contained"
         onPress={onSubmit}
@@ -178,9 +183,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginTop: spacing.md,
     marginBottom: spacing.lg,
-  },
-  submitError: {
-    marginBottom: spacing.sm,
   },
   primaryBtn: {
     marginTop: spacing.md,

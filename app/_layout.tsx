@@ -1,3 +1,5 @@
+import '../registerFirebaseMessagingBackground';
+
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -49,8 +51,11 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="clinic-settings" />
+        <Stack.Screen name="clinic-timings" />
+        <Stack.Screen name="clinic-services" />
         <Stack.Screen name="appointments" />
         <Stack.Screen name="patient-intake" />
+        <Stack.Screen name="view-patients" />
         <Stack.Screen name="patient-intake-visit" />
         <Stack.Screen name="patient-lookup" />
         <Stack.Screen name="patient-scan" />
@@ -60,6 +65,7 @@ export default function RootLayout() {
         <Stack.Screen name="upload" />
         <Stack.Screen name="claim" />
         <Stack.Screen name="claim-status" />
+        <Stack.Screen name="claim-detail" />
         <Stack.Screen name="reports" />
         <Stack.Screen name="doctor-availability" />
       </Stack>

@@ -63,21 +63,12 @@ export default function ReportsPatientListScreen() {
       <ScrollView
         contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
         showsVerticalScrollIndicator={false}>
-        <Text variant="bodyMedium" style={styles.intro}>
-          Patients who have completed a visit at this clinic. Open a row to see
-          visit details and uploaded reports.
-        </Text>
 
         {patients.length === 0 ? (
           <Card style={[clinicScreen.card, styles.emptyCard]} mode="outlined">
             <Card.Content>
               <Text variant="titleSmall" style={styles.emptyTitle}>
                 No visit records yet
-              </Text>
-              <Text variant="bodyMedium" style={styles.emptyBody}>
-                When you finish a visit from Patient visit → Record this visit,
-                it will appear here with notes and file names for prescriptions,
-                lab reports, and bills.
               </Text>
             </Card.Content>
           </Card>

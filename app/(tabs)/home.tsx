@@ -34,10 +34,12 @@ const DASHBOARD_CARDS: {
   icon: ClinicDashboardIcon;
   href:
     | '/patient-intake'
+    | '/view-patients'
     | '/appointments'
     | '/reports'
     | '/claim-status'
     | '/doctor-availability'
+    | '/clinic-services'
     | '/upload'
     | '/clinic-settings';
 }[] = [
@@ -47,6 +49,13 @@ const DASHBOARD_CARDS: {
     subtitle: 'One page: card, doctor, services, uploads & save',
     icon: { pack: 'material', name: 'account-injury' },
     href: '/patient-intake',
+  },
+  {
+    key: 'view-patients',
+    title: 'View patients',
+    subtitle: 'Look up by card, see everyone on the plan, then start a visit',
+    icon: { pack: 'material', name: 'account-group-outline' },
+    href: '/view-patients',
   },
   {
     key: 'appointments',
@@ -82,6 +91,13 @@ const DASHBOARD_CARDS: {
     subtitle: 'Roster, timings, and on-duty status',
     icon: { pack: 'material', name: 'doctor' },
     href: '/doctor-availability',
+  },
+  {
+    key: 'services',
+    title: 'Services',
+    subtitle: 'Choose which offerings apply to your clinic',
+    icon: { pack: 'material', name: 'medical-bag' },
+    href: '/clinic-services',
   },
 ];
 

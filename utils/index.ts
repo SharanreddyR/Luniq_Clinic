@@ -1,8 +1,10 @@
 export {
-  isValidApplicationPhone,
+  isValidClinicRegistrationPhone,
   isValidEmail,
   isValidPhoneOrEmail,
   isValidPincode,
+  normalizeClinicRegistrationPhone,
+  normalizeLoginIdentifier,
   normalizePhoneDigits,
 } from './validation';
 export { formatCardDisplay } from './format';

@@ -1,34 +1,42 @@
 {
   "expo": {
-    "name": "Luniq Clinic App",
+    "name": "Luniq Clinics",
     "slug": "clinic-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/brand-logo.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "clinicapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/brand-logo.png",
+      "image": "./assets/images/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.luniqcare.clinicapp",
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleDisplayName": "Luniq Clinics"
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/brand-logo.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.sharanreddy.clinicapp"
+      "package": "com.luniqcare.clinicapp"
     },
     "web": {
       "bundler": "metro",
@@ -37,7 +45,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
       "expo-document-picker",
       [
         "expo-camera",
@@ -45,7 +52,9 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to scan patient card barcodes."
         }
       ],
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true
@@ -56,6 +65,6 @@
         "projectId": "b3673243-0bc1-488c-a312-541f1a031324"
       }
     },
-    "owner": "sharanreddy"
+    "owner": "LuniqCare"
   }
 }

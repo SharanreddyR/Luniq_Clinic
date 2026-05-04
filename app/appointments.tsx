@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   Dialog,
   Portal,
   Text,
+  TextInput,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,44 +23,99 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
-import { useAppointments } from '@/hooks/useAppointments';
-import { useCompleteAppointment } from '@/hooks/useCompleteAppointment';
+import { useClinicAppointments } from '@/hooks/useAppointments';
 import {
-  type Appointment,
+  useConfirmClinicAppointment,
+  useRejectClinicAppointment,
+} from '@/hooks/useClinicAppointmentMutations';
+import {
+  type ClinicAppointment,
+  type ClinicAppointmentStatus,
+  CLINIC_APPOINTMENT_STATUSES,
+  appointmentApiErrorMessage,
   partitionAppointmentsByDay,
 } from '@/services/appointmentService';
 
-function formatSlot(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+const STATUS_LABELS: Record<ClinicAppointmentStatus, string> = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+};
+
+function formatSlot(item: ClinicAppointment): string {
+  const d = new Date(item.startsAt);
+  if (!Number.isNaN(d.getTime()) && d.getTime() !== 0) {
+    return d.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  return `${item.dateLabel} · ${item.timeLabel}`;
+}
+
+function dialUrl(phone: string): string {
+  const digits = phone.replace(/[^\d+]/g, '');
+  return `tel:${digits}`;
 }
 
 export default function AppointmentsScreen() {
-  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
-  const query = useAppointments();
-  const complete = useCompleteAppointment();
+  const [statusFilter, setStatusFilter] =
+    useState<ClinicAppointmentStatus>('pending');
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirmNotes, setConfirmNotes] = useState('');
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const query = useClinicAppointments(statusFilter);
+  const confirmMut = useConfirmClinicAppointment();
+  const rejectMut = useRejectClinicAppointment();
   const { showSuccess, showError } = useAppToast();
 
+  const list = query.data ?? [];
   const { today, upcoming } = useMemo(
-    () => partitionAppointmentsByDay(query.data ?? []),
-    [query.data],
+    () => partitionAppointmentsByDay(list),
+    [list],
   );
 
-  const rescheduleAppt = useMemo(() => {
-    if (!rescheduleId || !query.data) return null;
-    return query.data.find((a) => a.id === rescheduleId) ?? null;
-  }, [rescheduleId, query.data]);
+  const confirmAppt = useMemo(() => {
+    if (!confirmId) return null;
+    return list.find((a) => a.id === confirmId) ?? null;
+  }, [confirmId, list]);
+
+  const rejectAppt = useMemo(() => {
+    if (!rejectId) return null;
+    return list.find((a) => a.id === rejectId) ?? null;
+  }, [rejectId, list]);
+
+  const apiBusy = confirmMut.isPending || rejectMut.isPending;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader title="Appointments" />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filterRow}>
+        {CLINIC_APPOINTMENT_STATUSES.map((s) => (
+          <Chip
+            key={s}
+            selected={statusFilter === s}
+            onPress={() => setStatusFilter(s)}
+            style={styles.filterChip}
+            mode={statusFilter === s ? 'flat' : 'outlined'}
+            selectedColor={colors.onPrimary}
+            showSelectedOverlay>
+            {STATUS_LABELS[s]}
+          </Chip>
+        ))}
+      </ScrollView>
 
       <ScrollView
         contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
@@ -77,68 +134,72 @@ export default function AppointmentsScreen() {
               Loading appointments…
             </Text>
           </View>
-        ) : (query.data?.length ?? 0) === 0 ? (
-          <EmptyCard message="No appointments yet." />
+        ) : list.length === 0 ? (
+          <EmptyCard
+            message={`No ${STATUS_LABELS[statusFilter].toLowerCase()} appointments.`}
+          />
         ) : (
           <>
             <SectionTitle title="Today’s appointments" />
             {today.length === 0 ? (
-              <EmptyCard message="No appointments scheduled for today." />
+              <EmptyCard message="None scheduled for today in this list." />
             ) : (
               today.map((item) => (
                 <AppointmentCard
                   key={item.id}
                   item={item}
-                  completing={
-                    complete.isPending && complete.variables === item.id
+                  listStatus={statusFilter}
+                  apiBusy={apiBusy}
+                  confirming={
+                    confirmMut.isPending && confirmMut.variables?.id === item.id
                   }
-                  apiBusy={complete.isPending}
-                  onComplete={() => {
-                    complete.mutate(item.id, {
-                      onSuccess: () => {
-                        showSuccess('Visit marked completed');
-                      },
-                      onError: (err) => {
-                        showError(
-                          err instanceof Error
-                            ? err.message
-                            : 'Could not update appointment',
-                        );
-                      },
-                    });
+                  rejecting={
+                    rejectMut.isPending && rejectMut.variables?.id === item.id
+                  }
+                  onConfirm={() => {
+                    setConfirmNotes('');
+                    setConfirmId(item.id);
                   }}
-                  onReschedule={() => setRescheduleId(item.id)}
+                  onReject={() => {
+                    setRejectReason('');
+                    setRejectId(item.id);
+                  }}
+                  onCall={() => {
+                    if (!item.contactPhone) return;
+                    void Linking.openURL(dialUrl(item.contactPhone));
+                  }}
                 />
               ))
             )}
 
-            <SectionTitle title="Upcoming appointments" />
+            <SectionTitle title="Later" />
             {upcoming.length === 0 ? (
-              <EmptyCard message="No future appointments on the calendar." />
+              <EmptyCard message="No further appointments in this list." />
             ) : (
               upcoming.map((item) => (
                 <AppointmentCard
                   key={item.id}
                   item={item}
-                  completing={
-                    complete.isPending && complete.variables === item.id
+                  listStatus={statusFilter}
+                  apiBusy={apiBusy}
+                  confirming={
+                    confirmMut.isPending && confirmMut.variables?.id === item.id
                   }
-                  apiBusy={complete.isPending}
-                  onComplete={() => {
-                    complete.mutate(item.id, {
-                      onSuccess: () => {
-                        showSuccess('Visit marked completed');
-                      },
-                      onError: (err) => {
-                        showError(
-                          err instanceof Error
-                            ? err.message
-                            : 'Could not update appointment',
-                        );
-                      },
-                    });
+                  rejecting={
+                    rejectMut.isPending && rejectMut.variables?.id === item.id
+                  }
+                  onConfirm={() => {
+                    setConfirmNotes('');
+                    setConfirmId(item.id);
                   }}
-                  onReschedule={() => setRescheduleId(item.id)}
+                  onReject={() => {
+                    setRejectReason('');
+                    setRejectId(item.id);
+                  }}
+                  onCall={() => {
+                    if (!item.contactPhone) return;
+                    void Linking.openURL(dialUrl(item.contactPhone));
+                  }}
                 />
               ))
             )}
@@ -148,35 +209,111 @@ export default function AppointmentsScreen() {
 
       <Portal>
         <Dialog
-          visible={rescheduleId != null}
-          onDismiss={() => setRescheduleId(null)}
+          visible={confirmId != null}
+          onDismiss={() => !apiBusy && setConfirmId(null)}
           style={styles.dialog}>
-          <Dialog.Title>Reschedule</Dialog.Title>
+          <Dialog.Title>Confirm appointment</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={styles.dialogBody}>
-              {rescheduleAppt
-                ? `${rescheduleAppt.patientName} · ${formatSlot(rescheduleAppt.startsAt)}`
+              {confirmAppt
+                ? `${confirmAppt.patientName} · ${formatSlot(confirmAppt)}`
                 : ''}
             </Text>
-            <Text variant="bodyMedium" style={[styles.dialogBody, styles.mt]}>
-              Scheduling is not connected in this build. Use your practice
-              management or calendar tool to move the visit — this dialog is UI
-              only.
-            </Text>
+            <TextInput
+              mode="outlined"
+              label="Notes for patient (optional)"
+              value={confirmNotes}
+              onChangeText={setConfirmNotes}
+              multiline
+              numberOfLines={3}
+              style={styles.input}
+              disabled={apiBusy}
+            />
           </Dialog.Content>
           <Dialog.Actions>
+            <Button onPress={() => setConfirmId(null)} disabled={apiBusy}>
+              Cancel
+            </Button>
             <Button
-              onPress={() => setRescheduleId(null)}
-              disabled={complete.isPending}>
-              Close
+              mode="contained"
+              loading={confirmMut.isPending}
+              disabled={apiBusy || !confirmId}
+              onPress={() => {
+                if (!confirmId) return;
+                confirmMut.mutate(
+                  { id: confirmId, notes: confirmNotes.trim() || null },
+                  {
+                    onSuccess: () => {
+                      showSuccess('Appointment confirmed');
+                      setConfirmId(null);
+                    },
+                    onError: (err) => {
+                      showError(appointmentApiErrorMessage(err, 'Confirm failed'));
+                    },
+                  },
+                );
+              }}>
+              Confirm
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={rejectId != null}
+          onDismiss={() => !apiBusy && setRejectId(null)}
+          style={styles.dialog}>
+          <Dialog.Title>Reject appointment</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={styles.dialogBody}>
+              {rejectAppt
+                ? `${rejectAppt.patientName} · ${formatSlot(rejectAppt)}`
+                : ''}
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Reason (required)"
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+              numberOfLines={4}
+              style={styles.input}
+              disabled={apiBusy}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRejectId(null)} disabled={apiBusy}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              buttonColor={colors.error}
+              loading={rejectMut.isPending}
+              disabled={apiBusy || !rejectReason.trim() || !rejectId}
+              onPress={() => {
+                if (!rejectId || !rejectReason.trim()) return;
+                rejectMut.mutate(
+                  { id: rejectId, reason: rejectReason.trim() },
+                  {
+                    onSuccess: () => {
+                      showSuccess('Appointment rejected');
+                      setRejectId(null);
+                      setRejectReason('');
+                    },
+                    onError: (err) => {
+                      showError(appointmentApiErrorMessage(err, 'Reject failed'));
+                    },
+                  },
+                );
+              }}>
+              Reject
             </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
 
       <LoadingOverlay
-        visible={complete.isPending}
-        message="Updating appointment…"
+        visible={apiBusy}
+        message={confirmMut.isPending ? 'Confirming…' : 'Rejecting…'}
       />
     </SafeAreaView>
   );
@@ -202,20 +339,50 @@ function EmptyCard({ message }: { message: string }) {
   );
 }
 
+function statusChipStyle(status: ClinicAppointmentStatus): {
+  bg: string;
+  text: string;
+} {
+  switch (status) {
+    case 'pending':
+      return {
+        bg: colors.surfaceVariant,
+        text: colors.secondaryElevated,
+      };
+    case 'confirmed':
+      return { bg: 'rgba(27, 122, 108, 0.14)', text: colors.success };
+    case 'completed':
+      return { bg: 'rgba(59, 91, 140, 0.12)', text: colors.secondary };
+    case 'rejected':
+      return { bg: 'rgba(176, 0, 32, 0.1)', text: colors.error };
+    case 'cancelled':
+    default:
+      return { bg: colors.surfaceVariant, text: colors.textMuted };
+  }
+}
+
 function AppointmentCard({
   item,
-  completing,
+  listStatus,
   apiBusy,
-  onComplete,
-  onReschedule,
+  confirming,
+  rejecting,
+  onConfirm,
+  onReject,
+  onCall,
 }: {
-  item: Appointment;
-  completing: boolean;
+  item: ClinicAppointment;
+  listStatus: ClinicAppointmentStatus;
   apiBusy: boolean;
-  onComplete: () => void;
-  onReschedule: () => void;
+  confirming: boolean;
+  rejecting: boolean;
+  onConfirm: () => void;
+  onReject: () => void;
+  onCall: () => void;
 }) {
-  const pending = item.status === 'pending';
+  const chipStyle = statusChipStyle(item.status);
+  const showActions = listStatus === 'pending' && item.status === 'pending';
+  const canCall = Boolean(item.contactPhone?.trim());
 
   return (
     <Card style={[clinicScreen.card, styles.card]} mode="elevated">
@@ -225,42 +392,69 @@ function AppointmentCard({
             <Text variant="titleMedium" style={styles.patient}>
               {item.patientName}
             </Text>
+            <Text variant="bodySmall" style={styles.metaLine}>
+              {[item.patientAge != null ? `${item.patientAge} yrs` : null, item.patientGender]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
             <Text variant="bodyMedium" style={styles.doctor}>
               {item.doctorName}
             </Text>
             <Text variant="bodySmall" style={styles.time}>
-              {formatSlot(item.startsAt)}
+              {formatSlot(item)}
             </Text>
+            {item.reason ? (
+              <Text variant="bodySmall" style={styles.reason}>
+                {item.reason}
+              </Text>
+            ) : null}
+            {item.contactName || item.contactPhone ? (
+              <Text variant="bodySmall" style={styles.contact}>
+                {[item.contactName, item.contactPhone].filter(Boolean).join(' · ')}
+              </Text>
+            ) : null}
           </View>
           <Chip
             compact
             mode="flat"
-            style={pending ? styles.chipPending : styles.chipDone}
-            textStyle={
-              pending ? styles.chipPendingText : styles.chipDoneText
-            }>
-            {pending ? 'Pending' : 'Completed'}
+            style={[styles.statusChip, { backgroundColor: chipStyle.bg }]}
+            textStyle={{ color: chipStyle.text, fontWeight: '600' }}>
+            {STATUS_LABELS[item.status]}
           </Chip>
         </View>
         <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={onReschedule}
-            disabled={apiBusy}
-            style={[clinicScreen.buttonCompact, styles.actionBtn]}
-            contentStyle={clinicScreen.buttonContentCompact}>
-            Reschedule
-          </Button>
-          {pending ? (
+          {canCall ? (
             <Button
-              mode="contained"
-              onPress={onComplete}
-              loading={completing}
+              mode="outlined"
+              onPress={onCall}
               disabled={apiBusy}
               style={[clinicScreen.buttonCompact, styles.actionBtn]}
               contentStyle={clinicScreen.buttonContentCompact}>
-              Mark completed
+              Call
             </Button>
+          ) : null}
+          {showActions ? (
+            <>
+              <Button
+                mode="outlined"
+                onPress={onReject}
+                loading={rejecting}
+                disabled={apiBusy}
+                textColor={colors.error}
+                style={[clinicScreen.buttonCompact, styles.actionBtn]}
+                contentStyle={clinicScreen.buttonContentCompact}>
+                Reject
+              </Button>
+              <Button
+                mode="contained"
+                onPress={onConfirm}
+                loading={confirming}
+                disabled={apiBusy}
+                style={[clinicScreen.buttonCompact, styles.actionBtn]}
+                contentStyle={clinicScreen.buttonContentCompact}>
+                Confirm
+              </Button>
+            </>
           ) : null}
         </View>
       </Card.Content>
@@ -273,8 +467,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  filterScroll: {
+    maxHeight: 52,
+    flexGrow: 0,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  filterChip: {
+    marginRight: 4,
+  },
   scroll: {
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xl,
   },
   sectionTitle: {
@@ -299,29 +507,29 @@ const styles = StyleSheet.create({
     color: colors.secondary,
     fontWeight: '700',
   },
+  metaLine: {
+    color: colors.textMuted,
+    marginTop: 2,
+  },
   doctor: {
     color: colors.text,
-    marginTop: 4,
+    marginTop: 6,
   },
   time: {
     color: colors.textMuted,
     marginTop: 6,
   },
-  chipPending: {
-    backgroundColor: colors.surfaceVariant,
+  reason: {
+    color: colors.text,
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  contact: {
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  statusChip: {
     alignSelf: 'flex-start',
-  },
-  chipPendingText: {
-    color: colors.secondaryElevated,
-    fontWeight: '600',
-  },
-  chipDone: {
-    backgroundColor: 'rgba(27, 122, 108, 0.14)',
-    alignSelf: 'flex-start',
-  },
-  chipDoneText: {
-    color: colors.success,
-    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',
@@ -354,7 +562,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
-  mt: {
+  input: {
     marginTop: 12,
+    backgroundColor: colors.surface,
   },
 });

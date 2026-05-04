@@ -1,32 +1,14 @@
-import { useEffect, useRef } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  Button,
-  Card,
-  HelperText,
-  Switch,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import { router } from 'expo-router';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Card, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
-import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
-import { useAppToast } from '@/hooks/useAppToast';
-import { useClinicTimingQuery } from '@/hooks/useClinicTimingQuery';
-import { useClinicWeeklyTimingsQuery } from '@/hooks/useClinicWeeklyTimingsQuery';
-import { useSaveClinicTiming } from '@/hooks/useSaveClinicTiming';
-import { useClinicSettingsStore } from '@/store';
-import type { ClinicWeeklySlot } from '@/services/clinicTimingService';
+import { useClinicTimingsApiQuery } from '@/hooks/useClinicTimingsApiQuery';
+import { apiTimeToHi } from '@/services/clinicTimingService';
+import { useAuthStore } from '@/store';
 
 function formatDayLabel(day: string): string {
   const d = day.trim().toLowerCase();
@@ -34,226 +16,79 @@ function formatDayLabel(day: string): string {
   return d.charAt(0).toUpperCase() + d.slice(1);
 }
 
-/** Display HH:mm from `09:00:00` or `9:30`. */
-function formatClockHm(raw: string): string {
-  const s = raw.trim();
-  const m = s.match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return s;
-  const h = Math.min(23, Math.max(0, Number(m[1])));
-  const min = Math.min(59, Math.max(0, Number(m[2])));
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-}
-
-function isValidHm(value: string): boolean {
-  const m = value.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return false;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  return h >= 0 && h <= 23 && min >= 0 && min <= 59;
-}
-
-function normalizeHm(value: string): string {
-  const m = value.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return value.trim();
-  const h = Math.min(23, Math.max(0, Number(m[1])));
-  const min = Math.min(59, Math.max(0, Number(m[2])));
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-}
-
 export default function ClinicSettingsScreen() {
-  const openTime = useClinicSettingsStore((s) => s.openTime);
-  const closeTime = useClinicSettingsStore((s) => s.closeTime);
-  const isOpen = useClinicSettingsStore((s) => s.isOpen);
-  const setOpenTime = useClinicSettingsStore((s) => s.setOpenTime);
-  const setCloseTime = useClinicSettingsStore((s) => s.setCloseTime);
-  const setIsOpen = useClinicSettingsStore((s) => s.setIsOpen);
-  const setTiming = useClinicSettingsStore((s) => s.setTiming);
+  const token = useAuthStore((s) => s.token);
 
-  const saveTiming = useSaveClinicTiming();
-  const timingQuery = useClinicTimingQuery();
-  const weeklyQuery = useClinicWeeklyTimingsQuery();
-  const { showSuccess, showError } = useAppToast();
-  const hydratedFromServer = useRef(false);
-
-  useEffect(() => {
-    if (timingQuery.data && !hydratedFromServer.current) {
-      hydratedFromServer.current = true;
-      setTiming(
-        normalizeHm(timingQuery.data.openTime),
-        normalizeHm(timingQuery.data.closeTime),
-        timingQuery.data.isOpen,
-      );
-    }
-  }, [timingQuery.data, setTiming]);
-
-  const openOk = isValidHm(openTime);
-  const closeOk = isValidHm(closeTime);
-  const canSave =
-    openOk && closeOk && !saveTiming.isPending;
-
-  function onSave() {
-    if (!openOk || !closeOk) {
-      showError('Use 24-hour times like 09:00 and 18:00.');
-      return;
-    }
-    const payload = {
-      openTime: normalizeHm(openTime),
-      closeTime: normalizeHm(closeTime),
-      isOpen,
-    };
-    setOpenTime(payload.openTime);
-    setCloseTime(payload.closeTime);
-
-    saveTiming.mutate(payload, {
-      onSuccess: () => {
-        showSuccess('Clinic timing saved locally and sent to the server.');
-      },
-      onError: (err) => {
-        showError(
-          err instanceof Error ? err.message : 'Could not reach the server',
-        );
-      },
-    });
-  }
+  const timingsApiQuery = useClinicTimingsApiQuery({
+    enabled: Boolean(token),
+  });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader title="Clinic settings" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <Text variant="bodyMedium" style={styles.intro}>
-            Weekly hours shown below come from your clinic profile (Monday–Sunday).
-            Quick open/close times sync from timing routes when you tap Save.
-          </Text>
-          {!timingQuery.isFetching && !timingQuery.data ? (
-            <Text variant="bodySmall" style={styles.notFoundText}>
-              Data not found.
-            </Text>
-          ) : null}
+      <ScrollView
+        contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
 
-          <Card style={[clinicScreen.card, styles.card, styles.weekCard]} mode="elevated">
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.cardTitle}>
-                Weekly hours (profile)
+        <Card style={[clinicScreen.card, styles.card, styles.weekCard]} mode="elevated">
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.cardTitle}>
+              Weekly hours
+            </Text>
+            {!token ? (
+              <Text variant="bodySmall" style={styles.weekEmpty}>
+                Sign in as a clinic user to load this schedule.
               </Text>
-              <Text variant="bodySmall" style={styles.muted}>
-                Set in admin / onboarding; pulled from GET /clinic/profile.
+            ) : timingsApiQuery.isPending ? (
+              <View style={styles.weekLoading}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : timingsApiQuery.isError ? (
+              <Text variant="bodySmall" style={styles.weekEmpty}>
+                {timingsApiQuery.error instanceof Error
+                  ? timingsApiQuery.error.message
+                  : 'Could not load timings.'}
               </Text>
-              {weeklyQuery.isPending ? (
-                <View style={styles.weekLoading}>
-                  <ActivityIndicator color={colors.primary} />
-                </View>
-              ) : weeklyQuery.data && weeklyQuery.data.length > 0 ? (
-                weeklyQuery.data.map((slot: ClinicWeeklySlot) => (
-                  <View key={slot.day} style={styles.weekRow}>
+            ) : timingsApiQuery.data && timingsApiQuery.data.length > 0 ? (
+              timingsApiQuery.data.map((slot) => (
+                <View key={slot.day} style={styles.weekRow}>
+                  <View style={styles.weekDayCol}>
                     <Text variant="labelLarge" style={styles.weekDay}>
                       {formatDayLabel(slot.day)}
                     </Text>
-                    <Text
-                      variant="bodyMedium"
-                      style={
-                        slot.isClosed ? styles.weekHoursClosed : styles.weekHours
-                      }>
-                      {slot.isClosed
-                        ? 'Closed'
-                        : `${formatClockHm(slot.opensAt)} – ${formatClockHm(slot.closesAt)}`}
-                    </Text>
+                    {slot.is_open_now ? (
+                      <Text style={styles.openNowTiny}>Open now</Text>
+                    ) : null}
                   </View>
-                ))
-              ) : (
-                <Text variant="bodySmall" style={styles.weekEmpty}>
-                  No weekly schedule in profile yet. Complete clinic setup or add
-                  timings in admin.
-                </Text>
-              )}
-            </Card.Content>
-          </Card>
-
-          <Card style={[clinicScreen.card, styles.card]} mode="elevated">
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.cardTitle}>
-                Hours
-              </Text>
-              <TextInput
-                label="Open time"
-                value={openTime}
-                onChangeText={setOpenTime}
-                mode="outlined"
-                placeholder="09:00"
-                keyboardType="numbers-and-punctuation"
-                style={styles.input}
-                disabled={saveTiming.isPending}
-              />
-              <HelperText type={openOk ? 'info' : 'error'} visible={!openOk}>
-                Use HH:mm (24h), e.g. 09:00
-              </HelperText>
-              <TextInput
-                label="Close time"
-                value={closeTime}
-                onChangeText={setCloseTime}
-                mode="outlined"
-                placeholder="18:00"
-                keyboardType="numbers-and-punctuation"
-                style={styles.input}
-                disabled={saveTiming.isPending}
-              />
-              <HelperText type={closeOk ? 'info' : 'error'} visible={!closeOk}>
-                Use HH:mm (24h), e.g. 18:00
-              </HelperText>
-            </Card.Content>
-          </Card>
-
-          <Card style={[clinicScreen.card, styles.card]} mode="elevated">
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.cardTitle}>
-                Status
-              </Text>
-              <Text variant="bodySmall" style={styles.muted}>
-                Toggle whether the clinic is marked open or closed for patients.
-              </Text>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleText}>
-                  <Text variant="labelLarge" style={styles.toggleLabel}>
-                    {isOpen ? 'Open' : 'Closed'}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.toggleHint}>
-                    {isOpen
-                      ? 'Accepting visits during posted hours'
-                      : 'Not accepting walk-ins'}
+                  <Text
+                    variant="bodyMedium"
+                    style={
+                      slot.is_closed ? styles.weekHoursClosed : styles.weekHours
+                    }>
+                    {slot.is_closed
+                      ? 'Closed / leave'
+                      : `${apiTimeToHi(slot.opens_at) || '—'} – ${apiTimeToHi(slot.closes_at) || '—'}`}
                   </Text>
                 </View>
-                <Switch
-                  value={isOpen}
-                  onValueChange={setIsOpen}
-                  disabled={saveTiming.isPending}
-                  color={colors.primary}
-                />
-              </View>
-            </Card.Content>
-          </Card>
-
-          <Button
-            mode="contained"
-            onPress={onSave}
-            loading={saveTiming.isPending}
-            disabled={!canSave}
-            style={[clinicScreen.button, styles.save]}
-            contentStyle={clinicScreen.buttonContent}>
-            Save clinic timing
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <LoadingOverlay
-        visible={saveTiming.isPending}
-        message="Saving clinic timing…"
-      />
+              ))
+            ) : (
+              <Text variant="bodySmall" style={styles.weekEmpty}>
+                No timings returned yet. Add them under Manage weekly timings.
+              </Text>
+            )}
+            <Button
+              mode="contained"
+              onPress={() => router.push('/clinic-timings')}
+              disabled={!token}
+              style={[clinicScreen.button, styles.manageTimingsBtn]}
+              contentStyle={clinicScreen.buttonContent}>
+              Manage weekly timings
+            </Button>
+          </Card.Content>
+        </Card>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -263,9 +98,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  flex: {
-    flex: 1,
-  },
   scroll: {
     paddingTop: spacing.sm,
     paddingBottom: spacing.xl,
@@ -273,11 +105,7 @@ const styles = StyleSheet.create({
   intro: {
     ...typography.subtitle,
     marginBottom: spacing.lg,
-  },
-  notFoundText: {
-    ...typography.small,
-    color: colors.textMuted,
-    marginBottom: spacing.md,
+    lineHeight: 22,
   },
   card: {
     marginBottom: spacing.md,
@@ -297,10 +125,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  weekDayCol: {
+    width: '40%',
+  },
   weekDay: {
     color: colors.secondary,
     fontWeight: '700',
-    width: '36%',
+  },
+  openNowTiny: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.success,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  manageTimingsBtn: {
+    marginTop: spacing.md,
   },
   weekHours: {
     flex: 1,
@@ -325,33 +165,8 @@ const styles = StyleSheet.create({
     ...typography.title,
     marginBottom: spacing.md,
   },
-  input: {
-    marginBottom: 4,
-    backgroundColor: colors.surface,
-  },
   muted: {
     ...typography.subtitle,
     marginBottom: spacing.md,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toggleText: {
-    flex: 1,
-    paddingRight: spacing.md,
-  },
-  toggleLabel: {
-    ...typography.title,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  toggleHint: {
-    ...typography.small,
-    marginTop: spacing.xs / 2,
-  },
-  save: {
-    marginTop: spacing.md,
   },
 });

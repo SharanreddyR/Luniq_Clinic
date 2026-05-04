@@ -1,5 +1,5 @@
 /**
- * HEALTHAPP colour system — single source of truth for Luniq Clinic / Clinic App.
+ * HEALTHAPP colour system — single source of truth for Luniq Clinics / Clinic App.
  *
  * Role map:
  * - Primary (#2ebdb4): actions, links, selected tab, key icons

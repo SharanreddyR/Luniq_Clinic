@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { loginRequest } from '@/services/authService';
+import { registerFcmAfterAuth } from '@/services/fcmTokenService';
 import { useAuthStore } from '@/store';
 
 export function useLoginMutation() {
@@ -15,12 +16,13 @@ export function useLoginMutation() {
       phoneOrEmail: string;
       password: string;
     }) => loginRequest(phoneOrEmail, password),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.kind === 'clinic') {
         setClinicSession(data.token, data.clinic);
       } else {
         setUserSession(data.token, data.user);
       }
+      await registerFcmAfterAuth('login');
     },
   });
 }

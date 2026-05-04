@@ -37,9 +37,6 @@ export function CompactScreenHeader({ title, onBackPress }: Props) {
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            Care workflow
-          </Text>
         </View>
         <View style={styles.backSpacer} />
       </View>

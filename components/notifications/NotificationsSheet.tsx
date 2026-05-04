@@ -32,6 +32,8 @@ import type { AppNotification } from '@/services/notificationService';
 import {
   claimLookupRefFromNotification,
   formatNotificationTime,
+  patientCardFromNotification,
+  patientMemberIndexFromNotification,
 } from '@/services/notificationService';
 
 type MciName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -93,18 +95,39 @@ export function NotificationsSheet({ visible, onDismiss }: Props) {
     [onDismiss],
   );
 
+  const markReadQuiet = useCallback(
+    (n: AppNotification) => {
+      if (n.read_at != null) return;
+      markRead.mutate(n.id, {
+        onError: () => {
+          /* ignore */
+        },
+      });
+    },
+    [markRead],
+  );
+
   const onPressRow = useCallback(
     (n: AppNotification) => {
-      if (n.read_at == null) {
-        markRead.mutate(n.id, {
-          onError: () => {
-            /* still allow navigation */
-          },
-        });
-      }
-      openClaimIfAny(n);
+      markReadQuiet(n);
     },
-    [markRead, openClaimIfAny],
+    [markReadQuiet],
+  );
+
+  const onViewPatient = useCallback(
+    (n: AppNotification) => {
+      const card = patientCardFromNotification(n);
+      if (!card) return;
+      markReadQuiet(n);
+      const mi = patientMemberIndexFromNotification(n);
+      const qs = new URLSearchParams();
+      qs.set('card', card);
+      qs.set('notify', '1');
+      if (mi != null) qs.set('memberIndex', String(mi));
+      onDismiss();
+      router.push(`/patient-intake?${qs.toString()}` as Href);
+    },
+    [markReadQuiet, onDismiss],
   );
 
   const renderItem = useCallback(
@@ -113,53 +136,65 @@ export function NotificationsSheet({ visible, onDismiss }: Props) {
       const accent = notificationAccent(item.type);
       const iconName = notificationIcon(item.type);
       const claimRef = claimLookupRefFromNotification(item);
+      const patientCard = patientCardFromNotification(item);
       return (
-        <Pressable
-          onPress={() => onPressRow(item)}
-          style={({ pressed }) => [
-            styles.row,
-            unread && styles.rowUnread,
-            pressed && styles.rowPressed,
-          ]}
-          accessibilityRole="button"
+        <View
+          style={[styles.row, unread && styles.rowUnread]}
           accessibilityLabel={`${item.title}. ${item.body}`}>
-          <View style={[styles.rowIconWrap, { borderColor: accent }]}>
-            <MaterialCommunityIcons name={iconName} size={22} color={accent} />
-          </View>
-          <View style={styles.rowBody}>
-            <View style={styles.rowTitleRow}>
-              <Text
-                variant="titleSmall"
-                style={[styles.rowTitle, unread && styles.rowTitleUnread]}
-                numberOfLines={2}>
-                {item.title}
-              </Text>
-              {unread ? <View style={styles.unreadDot} /> : null}
+          <Pressable
+            onPress={() => onPressRow(item)}
+            style={({ pressed }) => [styles.rowMainPress, pressed && styles.rowPressed]}
+            accessibilityRole="button"
+            accessibilityHint="Marks notification as read">
+            <View style={[styles.rowIconWrap, { borderColor: accent }]}>
+              <MaterialCommunityIcons name={iconName} size={22} color={accent} />
             </View>
-            <Text variant="bodySmall" style={styles.rowBodyText} numberOfLines={3}>
-              {item.body}
-            </Text>
-            <View style={styles.rowMeta}>
+            <View style={styles.rowBody}>
+              <View style={styles.rowTitleRow}>
+                <Text
+                  variant="titleSmall"
+                  style={[styles.rowTitle, unread && styles.rowTitleUnread]}
+                  numberOfLines={2}>
+                  {item.title}
+                </Text>
+                {unread ? <View style={styles.unreadDot} /> : null}
+              </View>
+              <Text variant="bodySmall" style={styles.rowBodyText} numberOfLines={3}>
+                {item.body}
+              </Text>
               <Text variant="labelSmall" style={styles.rowTime}>
                 {formatNotificationTime(item.created_at)}
               </Text>
+            </View>
+          </Pressable>
+          {claimRef || patientCard ? (
+            <View style={styles.rowActions}>
+              {patientCard ? (
+                <Button
+                  mode="text"
+                  compact
+                  onPress={() => onViewPatient(item)}
+                  textColor={colors.secondary}
+                  labelStyle={styles.rowActionLabel}>
+                  View patient
+                </Button>
+              ) : null}
               {claimRef ? (
-                <Text variant="labelSmall" style={styles.rowClaimHint}>
-                  Tap for claim status
-                </Text>
+                <Button
+                  mode="text"
+                  compact
+                  onPress={() => openClaimIfAny(item)}
+                  textColor={colors.primary}
+                  labelStyle={styles.rowActionLabel}>
+                  Claim status
+                </Button>
               ) : null}
             </View>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={22}
-            color={colors.textMuted}
-            style={styles.rowChevron}
-          />
-        </Pressable>
+          ) : null}
+        </View>
       );
     },
-    [onPressRow],
+    [onPressRow, onViewPatient, openClaimIfAny],
   );
 
   const listEmpty =
@@ -325,10 +360,26 @@ const styles = StyleSheet.create({
   },
   sep: { marginVertical: 0 },
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingVertical: spacing.md,
     gap: spacing.sm,
+  },
+  rowMainPress: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingLeft: 44 + spacing.sm,
+  },
+  rowActionLabel: {
+    fontWeight: '700',
+    fontSize: 13,
   },
   rowUnread: {
     backgroundColor: 'rgba(46, 189, 180, 0.06)',
@@ -372,19 +423,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 20,
   },
-  rowMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  rowTime: { color: colors.textMuted },
-  rowClaimHint: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  rowChevron: { marginTop: spacing.sm },
+  rowTime: { color: colors.textMuted, marginTop: spacing.sm },
   empty: {
     alignItems: 'center',
     paddingVertical: spacing.xl * 2,

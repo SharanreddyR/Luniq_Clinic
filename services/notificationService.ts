@@ -78,6 +78,40 @@ export function claimLookupRefFromNotification(n: AppNotification): string | nul
   return null;
 }
 
+/** Card reference for patient intake (`card_number`, `card_no`, etc.). */
+export function patientCardFromNotification(n: AppNotification): string | null {
+  const d = n.data;
+  if (!d || typeof d !== 'object') return null;
+  const keys = [
+    'card_number',
+    'card_no',
+    'member_card_number',
+    'lnq_card',
+    'patient_card',
+  ] as const;
+  for (const k of keys) {
+    if (!(k in d)) continue;
+    const v = d[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return null;
+}
+
+/** Index into `PatientRecord.members` when the notification targets one person on a family card. */
+export function patientMemberIndexFromNotification(n: AppNotification): number | null {
+  const d = n.data;
+  if (!d || typeof d !== 'object') return null;
+  const mi = d.member_index ?? d.memberIndex;
+  if (typeof mi === 'number' && Number.isFinite(mi) && mi >= 0) {
+    return Math.floor(mi);
+  }
+  if (typeof mi === 'string' && /^\d+$/.test(mi.trim())) {
+    return Number(mi.trim());
+  }
+  return null;
+}
+
 export function formatNotificationTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';

@@ -349,7 +349,129 @@ export async function submitClinicVisit(
   }
 }
 
-/** GET /clinic/visits/member/{personId}/history */
+/** GET /clinic/visits/open — paginated open visits (default per_page=10) */
+export type ClinicOpenVisitPatient = {
+  id: number;
+  name: string;
+  gender: string;
+  photo_url: string | null;
+};
+
+export type ClinicOpenVisitDoctor = {
+  id: number;
+  name: string;
+  specialization: string | null;
+};
+
+export type ClinicOpenVisitRow = {
+  visit_id: number;
+  started_at: string;
+  card_number: string;
+  patient: ClinicOpenVisitPatient;
+  doctor: ClinicOpenVisitDoctor;
+  documents_uploaded: number;
+};
+
+function parseClinicOpenVisitRows(raw: unknown): ClinicOpenVisitRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ClinicOpenVisitRow[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const visitId = Number(o.visit_id);
+    if (!Number.isFinite(visitId)) continue;
+    const started_at =
+      typeof o.started_at === 'string' ? o.started_at : '';
+    const card_number =
+      typeof o.card_number === 'string' ? o.card_number : '';
+    const p = o.patient;
+    const d = o.doctor;
+    if (!p || typeof p !== 'object' || !d || typeof d !== 'object') continue;
+    const pr = p as Record<string, unknown>;
+    const dr = d as Record<string, unknown>;
+    const pid = Number(pr.id);
+    const did = Number(dr.id);
+    if (!Number.isFinite(pid) || !Number.isFinite(did)) continue;
+    const spec = dr.specialization;
+    out.push({
+      visit_id: visitId,
+      started_at,
+      card_number,
+      patient: {
+        id: pid,
+        name: typeof pr.name === 'string' ? pr.name : String(pr.name ?? ''),
+        gender: typeof pr.gender === 'string' ? pr.gender : '',
+        photo_url:
+          typeof pr.photo_url === 'string' ? pr.photo_url.trim() : null,
+      },
+      doctor: {
+        id: did,
+        name: typeof dr.name === 'string' ? dr.name : String(dr.name ?? ''),
+        specialization:
+          typeof spec === 'string' && spec.trim() ? spec.trim() : null,
+      },
+      documents_uploaded: Number(o.documents_uploaded) || 0,
+    });
+  }
+  return out;
+}
+
+export type ClinicOpenVisitsMeta = {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+};
+
+function parseClinicOpenVisitsMeta(raw: unknown): ClinicOpenVisitsMeta | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Record<string, unknown>;
+  const current_page = Number(m.current_page);
+  const last_page = Number(m.last_page);
+  const per_page = Number(m.per_page);
+  const total = Number(m.total);
+  if (
+    ![current_page, last_page, per_page, total].every((n) =>
+      Number.isFinite(n),
+    )
+  ) {
+    return null;
+  }
+  return { current_page, last_page, per_page, total };
+}
+
+export async function fetchClinicOpenVisitsPage(options: {
+  page: number;
+  perPage?: number;
+}): Promise<{ data: ClinicOpenVisitRow[]; meta: ClinicOpenVisitsMeta }> {
+  const perPage = options.perPage ?? 10;
+  try {
+    const { data } = await api.get<{
+      success?: boolean;
+      data?: unknown[];
+      meta?: unknown;
+    }>('/clinic/visits/open', {
+      params: { page: options.page, per_page: perPage },
+    });
+    const rows = parseClinicOpenVisitRows(data?.data);
+    const parsed = parseClinicOpenVisitsMeta(data?.meta);
+    const meta: ClinicOpenVisitsMeta =
+      parsed ??
+      ({
+        current_page: options.page,
+        last_page: rows.length < perPage ? options.page : options.page + 1,
+        per_page: perPage,
+        total:
+          rows.length < perPage
+            ? (options.page - 1) * perPage + rows.length
+            : options.page * perPage + 1,
+      } as ClinicOpenVisitsMeta);
+    return { data: rows, meta };
+  } catch (e) {
+    throw new Error(errMessage(e, 'Could not load open visits.'));
+  }
+}
+
 export async function fetchMemberVisitHistory(
   personId: number,
   options?: { perPage?: number },

@@ -1,6 +1,6 @@
 /** Display name (wordmark splits on spaces). Override with `EXPO_PUBLIC_APP_NAME`. */
 export const APP_NAME =
-  String(process.env.EXPO_PUBLIC_APP_NAME ?? '').trim() || 'Luniq Clinic';
+  String(process.env.EXPO_PUBLIC_APP_NAME ?? '').trim() || 'Luniq Clinics';
 
 /** Recipient for admin visit-approval mail. Override with `EXPO_PUBLIC_ADMIN_CLAIM_APPROVAL_EMAIL`. */
 export const ADMIN_CLAIM_APPROVAL_EMAIL =

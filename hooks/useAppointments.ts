@@ -1,11 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchAppointments } from '@/services/appointmentService';
+import {
+  type ClinicAppointmentStatus,
+  fetchClinicAppointmentsPage,
+} from '@/services/appointmentService';
 
-export function useAppointments() {
+export const clinicAppointmentsQueryKey = (
+  status: ClinicAppointmentStatus,
+) => ['clinic', 'appointments', status] as const;
+
+export function useClinicAppointments(status: ClinicAppointmentStatus) {
   return useQuery({
-    queryKey: ['appointments'],
-    queryFn: fetchAppointments,
+    queryKey: clinicAppointmentsQueryKey(status),
+    queryFn: () => fetchClinicAppointmentsPage({ status }),
     staleTime: 30_000,
+    select: (page) => page.appointments,
   });
 }

@@ -3,58 +3,20 @@ import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import { NOTIFICATIONS_QUERY_KEY } from '@/hooks/useNotifications';
-import {
-  fetchNotificationsPage,
-  type AppNotification,
-} from '@/services/notificationService';
-import { presentLocalInboxAlert, ensureNotificationAlertRuntime } from '@/services/notificationAlerts';
+import { fetchNotificationsPage } from '@/services/notificationService';
 import { useAuthStore } from '@/store';
 
 const POLL_MS = 32_000;
 
-function pickAlertPayload(newItems: AppNotification[]): {
-  title: string;
-  body: string;
-  data: Record<string, unknown>;
-} {
-  const sorted = [...newItems].sort((a, b) => b.id - a.id);
-  const latest = sorted[0];
-  if (newItems.length === 1 && latest) {
-    return {
-      title: latest.title,
-      body: latest.body,
-      data: {
-        notificationId: latest.id,
-        type: latest.type,
-        ...(latest.data && typeof latest.data === 'object' ? latest.data : {}),
-      },
-    };
-  }
-  return {
-    title: `${newItems.length} new notifications`,
-    body: latest
-      ? `${latest.title} · ${latest.body}`
-      : 'Open the inbox to read updates.',
-    data: {
-      notificationId: latest?.id,
-      batchCount: newItems.length,
-    },
-  };
-}
-
 /**
  * Polls GET /notifications while logged in and the app is active; when new rows
- * appear (vs last poll), plays system notification sound + banner via local notification.
+ * appear (vs last poll), refreshes the dashboard notifications query (no system banner).
  */
 export function NotificationInboxListener() {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
   const lastSeenMaxIdRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-  useEffect(() => {
-    void ensureNotificationAlertRuntime();
-  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -95,8 +57,6 @@ export function NotificationInboxListener() {
           void queryClient.invalidateQueries({
             queryKey: [...NOTIFICATIONS_QUERY_KEY],
           });
-          const payload = pickAlertPayload(newItems);
-          await presentLocalInboxAlert(payload);
         } else {
           lastSeenMaxIdRef.current = Math.max(lastSeenMaxIdRef.current, maxId);
         }

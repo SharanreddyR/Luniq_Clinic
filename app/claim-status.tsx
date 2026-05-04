@@ -1,277 +1,388 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
-import {
-  Button,
-  Card,
-  Chip,
-  HelperText,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import { Button, Card, HelperText, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
-import { useAppToast } from '@/hooks/useAppToast';
-import { useClaimStatus } from '@/hooks/useClaimStatus';
+import { useClinicClaimsInfiniteQuery } from '@/hooks/useClinicClaimsInfiniteQuery';
 import {
-  CLAIM_APPROVED_DELIVERY_NOTE,
   CLAIM_LIFECYCLE_LABELS,
-  CLAIM_STATUS_TRACKING_NOTE,
+  normalizeClaimLifecycleStatus,
   type ClaimLifecycleStatus,
+  type ClinicClaimListItem,
 } from '@/services/claimService';
+import { useAuthStore } from '@/store';
 
-const STATUS_ORDER: ClaimLifecycleStatus[] = [
-  'submitted',
-  'verifying',
-  'approved',
-  'rejected',
-];
-
-function paramClaimId(
-  raw: string | string[] | undefined,
-): string | undefined {
-  if (raw == null) return undefined;
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  const t = v?.trim();
-  return t ? t : undefined;
-}
-
-function chipStyle(
-  key: ClaimLifecycleStatus,
-  current: ClaimLifecycleStatus,
-): object {
-  const selected = key === current;
-  if (!selected) {
-    return {
-      backgroundColor: colors.surfaceVariant,
-      borderColor: colors.border,
-    };
-  }
-  switch (key) {
-    case 'submitted':
-      return { backgroundColor: colors.surfaceVariant, borderColor: colors.primary };
-    case 'verifying':
-      return { backgroundColor: 'rgba(46, 189, 180, 0.18)', borderColor: colors.primary };
+function statusCornerStyle(lifecycle: ClaimLifecycleStatus): object {
+  switch (lifecycle) {
     case 'approved':
-      return { backgroundColor: 'rgba(27, 122, 108, 0.2)', borderColor: colors.success };
+      return {
+        backgroundColor: 'rgba(27, 122, 108, 0.22)',
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: 'rgba(27, 122, 108, 0.35)',
+      };
     case 'rejected':
-      return { backgroundColor: 'rgba(179, 38, 30, 0.12)', borderColor: colors.error };
+      return {
+        backgroundColor: 'rgba(179, 38, 30, 0.18)',
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: 'rgba(179, 38, 30, 0.35)',
+      };
+    case 'verifying':
+      return {
+        backgroundColor: 'rgba(46, 189, 180, 0.22)',
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: 'rgba(11, 107, 109, 0.28)',
+      };
     default:
-      return {};
+      return {
+        backgroundColor: colors.surfaceVariant,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: colors.border,
+      };
   }
 }
 
-function chipTextStyle(
-  key: ClaimLifecycleStatus,
-  current: ClaimLifecycleStatus,
-): object {
-  const selected = key === current;
-  if (!selected) return { color: colors.textMuted };
-  if (key === 'rejected') return { color: colors.error, fontWeight: '700' };
-  if (key === 'approved') return { color: colors.success, fontWeight: '700' };
-  return { color: colors.secondary, fontWeight: '700' };
+function statusCornerTextStyle(lifecycle: ClaimLifecycleStatus): object {
+  switch (lifecycle) {
+    case 'approved':
+      return { color: colors.success };
+    case 'rejected':
+      return { color: colors.error };
+    case 'verifying':
+      return { color: colors.secondary };
+    default:
+      return { color: colors.textMuted };
+  }
+}
+
+/** Normalize for matching CLM numbers typed with/without dashes or spaces */
+function normalizeClaimSearch(s: string): string {
+  return s.toLowerCase().replace(/[\s-]/g, '');
+}
+
+function matchesClaimSearch(item: ClinicClaimListItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+
+  const name = item.patient_name.toLowerCase();
+  if (name.includes(q)) return true;
+
+  const numRaw = (item.claim_number || '').toLowerCase();
+  if (numRaw.includes(q)) return true;
+
+  const qCompact = normalizeClaimSearch(query);
+  if (qCompact.length > 0 && normalizeClaimSearch(item.claim_number || '').includes(qCompact)) {
+    return true;
+  }
+
+  return false;
 }
 
 export default function ClaimStatusScreen() {
-  const params = useLocalSearchParams<{ claimId?: string | string[] }>();
-  const paramId = useMemo(() => paramClaimId(params.claimId), [params.claimId]);
+  const token = useAuthStore((s) => s.token);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [inputId, setInputId] = useState(paramId ?? '');
-  const [queryId, setQueryId] = useState<string | null>(paramId ?? null);
+  const claimsQuery = useClinicClaimsInfiniteQuery({
+    enabled: Boolean(token),
+  });
 
-  useEffect(() => {
-    if (paramId) {
-      setInputId(paramId);
-      setQueryId(paramId);
-    }
-  }, [paramId]);
+  const rows = useMemo(
+    () => claimsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [claimsQuery.data?.pages],
+  );
 
-  const statusQuery = useClaimStatus(queryId);
-  const { showError, showSuccess } = useAppToast();
-  const loadErrorToastShown = useRef(false);
-  const loadSuccessToastKey = useRef<string | null>(null);
+  const filteredRows = useMemo(
+    () => rows.filter((item) => matchesClaimSearch(item, searchQuery)),
+    [rows, searchQuery],
+  );
 
-  const lifecycle: ClaimLifecycleStatus =
-    statusQuery.data?.lifecycle ?? 'submitted';
-
-  useEffect(() => {
-    if (statusQuery.isError) {
-      if (!loadErrorToastShown.current) {
-        showError('Could not load claim status');
-        loadErrorToastShown.current = true;
-      }
-    } else {
-      loadErrorToastShown.current = false;
-    }
-  }, [statusQuery.isError, showError]);
-
-  useEffect(() => {
-    if (
-      !queryId ||
-      !statusQuery.isSuccess ||
-      !statusQuery.data ||
-      statusQuery.isFetching
-    ) {
-      return;
-    }
-    const key = `${queryId}-${String(statusQuery.dataUpdatedAt)}`;
-    if (loadSuccessToastKey.current === key) return;
-    loadSuccessToastKey.current = key;
-    showSuccess('Claim status loaded.');
-  }, [
-    queryId,
-    statusQuery.isSuccess,
-    statusQuery.data,
-    statusQuery.isFetching,
-    statusQuery.dataUpdatedAt,
-    showSuccess,
-  ]);
+  const meta = claimsQuery.data?.pages?.[claimsQuery.data.pages.length - 1]?.meta;
 
   const onRefresh = useCallback(() => {
-    void statusQuery.refetch();
-  }, [statusQuery]);
+    void claimsQuery.refetch();
+  }, [claimsQuery]);
 
-  function onLoad() {
-    const next = inputId.trim();
-    if (!next) {
-      setQueryId(null);
-      return;
+  const loadMore = useCallback(() => {
+    if (claimsQuery.hasNextPage && !claimsQuery.isFetchingNextPage) {
+      void claimsQuery.fetchNextPage();
     }
-    setQueryId(next);
+  }, [claimsQuery]);
+
+  function openDetail(item: ClinicClaimListItem) {
+    router.push({
+      pathname: '/claim-detail',
+      params: { id: String(item.id) },
+    });
   }
 
-  const displayClaimId = statusQuery.data?.claimId ?? queryId ?? '—';
+  const listRefreshing =
+    claimsQuery.isRefetching && !claimsQuery.isFetchingNextPage;
+
+  const displayClaimNo = useCallback((item: ClinicClaimListItem) => {
+    const raw = (item.claim_number ?? '').trim();
+    return raw.length > 0 ? raw : `CLM-${item.id}`;
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ClinicClaimListItem }) => {
+      const lifecycle = normalizeClaimLifecycleStatus(item.status);
+      const clmNo = displayClaimNo(item);
+      return (
+        <Card style={[styles.rowCard, clinicScreen.card]} mode="elevated">
+          <View style={styles.cardClip}>
+            <View
+              style={[
+                styles.statusCorner,
+                statusCornerStyle(lifecycle),
+              ]}
+              accessibilityRole="text"
+              accessibilityLabel={`Status ${CLAIM_LIFECYCLE_LABELS[lifecycle]}`}>
+              <Text
+                style={[
+                  styles.statusCornerText,
+                  statusCornerTextStyle(lifecycle),
+                ]}
+                numberOfLines={1}>
+                {CLAIM_LIFECYCLE_LABELS[lifecycle]}
+              </Text>
+            </View>
+            <Card.Content style={styles.cardBody}>
+              <View style={styles.rowInner}>
+                <View style={styles.rowMain}>
+                  <View style={styles.clmBlock}>
+                    <Text variant="labelMedium" style={styles.clmLabel}>
+                      CLM no.
+                    </Text>
+                    <Text
+                      variant="titleMedium"
+                      style={styles.clmValue}
+                      selectable
+                      accessibilityRole="text">
+                      {clmNo}
+                    </Text>
+                  </View>
+
+                  <Text variant="bodyMedium" style={styles.patient}>
+                    {item.patient_name}
+                    {item.patient_gender ? ` · ${item.patient_gender}` : ''}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.muted}>
+                    Dr. {item.doctor_name}
+                  </Text>
+                  <View style={styles.amountRow}>
+                    <Text variant="bodySmall" style={styles.muted}>
+                      Visited {item.visited_at ?? '—'}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.amount}>
+                      ₹{item.total_claimed}
+                      {item.approved_amount !== item.total_claimed ? (
+                        <Text style={styles.approvedHint}>
+                          {' '}
+                          (approved ₹{item.approved_amount})
+                        </Text>
+                      ) : null}
+                    </Text>
+                  </View>
+                  <Text variant="labelSmall" style={styles.raised}>
+                    Raised on {item.raised_on || '—'}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => openDetail(item)}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View details for ${clmNo}`}
+                  style={({ pressed }) => [
+                    styles.eyeBtn,
+                    pressed && styles.eyeBtnPressed,
+                  ]}>
+                  <MaterialCommunityIcons
+                    name="eye-outline"
+                    size={26}
+                    color={colors.secondary}
+                  />
+                </Pressable>
+              </View>
+            </Card.Content>
+          </View>
+        </Card>
+      );
+    },
+    [displayClaimNo],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.headerBlock}>
+        <TextInput
+          mode="outlined"
+          placeholder="Search by CLM no. or patient name"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+          outlineStyle={styles.searchOutline}
+          dense
+          left={<TextInput.Icon icon="magnify" />}
+          right={
+            searchQuery.length > 0 ? (
+              <TextInput.Icon
+                icon="close"
+                onPress={() => setSearchQuery('')}
+                forceTextInputFocus={false}
+              />
+            ) : undefined
+          }
+        />
+        {meta ? (
+          <Text variant="bodySmall" style={styles.listMeta}>
+            {meta.total === 0
+              ? 'No claims yet.'
+              : `${meta.total} claim${meta.total === 1 ? '' : 's'} loaded`}
+            {searchQuery.trim().length > 0 && rows.length > 0
+              ? ` · showing ${filteredRows.length} match${filteredRows.length === 1 ? '' : 'es'}`
+              : meta.last_page > 1
+                ? ` · page ${meta.current_page} of ${meta.last_page}`
+                : ''}
+          </Text>
+        ) : null}
+      </View>
+    ),
+    [
+      searchQuery,
+      meta,
+      rows.length,
+      filteredRows.length,
+    ],
+  );
+
+  const emptyMessage = useMemo(() => {
+    if (claimsQuery.isPending) return null;
+    if (claimsQuery.isError) return null;
+    if (rows.length === 0) {
+      return (
+        <Text variant="bodyMedium" style={styles.muted}>
+          No claims to show.
+        </Text>
+      );
+    }
+    if (filteredRows.length === 0 && searchQuery.trim().length > 0) {
+      return (
+        <View style={styles.emptySearch}>
+          <MaterialCommunityIcons
+            name="text-search"
+            size={40}
+            color={colors.textMuted}
+          />
+          <Text variant="titleSmall" style={styles.emptySearchTitle}>
+            No matching claims
+          </Text>
+          <Text variant="bodyMedium" style={styles.muted}>
+            Try another CLM number or patient name, or clear the search.
+          </Text>
+          <Button mode="text" onPress={() => setSearchQuery('')} compact>
+            Clear search
+          </Button>
+        </View>
+      );
+    }
+    return null;
+  }, [
+    claimsQuery.isPending,
+    claimsQuery.isError,
+    rows.length,
+    filteredRows.length,
+    searchQuery,
+  ]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader title="Claim status" />
 
-      <ScrollView
-        contentContainerStyle={[clinicScreen.screenPadding, styles.scroll]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={statusQuery.isFetching}
-            onRefresh={onRefresh}
-            enabled={queryId != null && queryId.length > 0}
-            tintColor={colors.primary}
-          />
-        }>
-        <Text variant="bodyMedium" style={styles.intro}>
-          Enter a claim ID to load the latest status from GET /claim-status.
-        </Text>
-
-        <Card style={[clinicScreen.card, styles.card]} mode="elevated">
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.cardTitle}>
-              Look up claim
-            </Text>
-            <TextInput
-              label="Claim ID"
-              value={inputId}
-              onChangeText={setInputId}
-              mode="outlined"
-              autoCapitalize="characters"
-              placeholder="e.g. CLM123"
-              style={styles.input}
-              onSubmitEditing={() => {
-                if (inputId.trim()) onLoad();
-              }}
-              returnKeyType="search"
-              editable={!statusQuery.isFetching}
-            />
-            <Button
-              mode="contained"
-              onPress={onLoad}
-              loading={statusQuery.isFetching && !!queryId}
-              disabled={
-                statusQuery.isFetching || !inputId.trim()
-              }
-              style={[clinicScreen.button, styles.loadBtn]}
-              contentStyle={clinicScreen.buttonContent}>
-              Load status
-            </Button>
-          </Card.Content>
-        </Card>
-
-        {queryId == null || queryId.length === 0 ? (
-          <HelperText type="info" visible style={styles.hint}>
-            Enter a claim ID above, then tap Load status.
+      {!token ? (
+        <View style={[clinicScreen.screenPadding, styles.padTop]}>
+          <HelperText type="error" visible>
+            Sign in as a clinic user to view claims.
           </HelperText>
-        ) : statusQuery.isPending && !statusQuery.data ? null : statusQuery.isError ? (
-          <Card style={[clinicScreen.card, styles.card]} mode="outlined">
-            <Card.Content>
-              <Text variant="bodyLarge" style={styles.error}>
-                Could not load status
-              </Text>
-              <Text variant="bodyMedium" style={styles.muted}>
-                Pull down to retry.
-              </Text>
-            </Card.Content>
-          </Card>
-        ) : (
-          <>
-            <Card style={[clinicScreen.card, styles.card]} mode="elevated">
-              <Card.Content>
-                <Text variant="labelLarge" style={styles.label}>
-                  Claim ID
-                </Text>
-                <Text variant="headlineSmall" style={styles.claimId}>
-                  {displayClaimId}
-                </Text>
+        </View>
+      ) : null}
 
-                <Text variant="labelLarge" style={[styles.label, styles.statusLabel]}>
-                  Status
-                </Text>
-                <View style={styles.chipRow}>
-                  {STATUS_ORDER.map((key) => (
-                    <Chip
-                      key={key}
-                      mode="outlined"
-                      compact
-                      selected={key === lifecycle}
-                      style={[styles.chip, chipStyle(key, lifecycle)]}
-                      textStyle={chipTextStyle(key, lifecycle)}>
-                      {CLAIM_LIFECYCLE_LABELS[key]}
-                    </Chip>
-                  ))}
-                </View>
-                {statusQuery.data?.message ? (
-                  <Text variant="bodyMedium" style={styles.message}>
-                    {statusQuery.data.message}
+      {token ? (
+        <FlatList
+          data={filteredRows}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={[
+            clinicScreen.screenPadding,
+            styles.listContent,
+            filteredRows.length === 0 && styles.listEmpty,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={listRefreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.35}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            claimsQuery.isPending ? null : claimsQuery.isError ? (
+              <Card style={clinicScreen.card} mode="outlined">
+                <Card.Content>
+                  <Text variant="bodyLarge" style={styles.errorTitle}>
+                    Could not load claims
                   </Text>
-                ) : null}
-              </Card.Content>
-            </Card>
+                  <Text variant="bodyMedium" style={styles.muted}>
+                    {claimsQuery.error instanceof Error
+                      ? claimsQuery.error.message
+                      : 'Pull down to retry.'}
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => void claimsQuery.refetch()}
+                    style={[clinicScreen.button, styles.retryBtn]}
+                    contentStyle={clinicScreen.buttonContent}>
+                    Retry
+                  </Button>
+                </Card.Content>
+              </Card>
+            ) : (
+              emptyMessage
+            )
+          }
+          ListFooterComponent={
+            claimsQuery.isFetchingNextPage ? (
+              <ActivityIndicator
+                style={styles.footerLoader}
+                color={colors.primary}
+              />
+            ) : null
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      ) : null}
 
-            <Card style={[clinicScreen.card, styles.noteCard]} mode="outlined">
-              <Card.Content>
-                <Text variant="titleSmall" style={styles.noteTitle}>
-                  Note
-                </Text>
-                <Text variant="bodyMedium" style={styles.noteBody}>
-                  {lifecycle === 'approved'
-                    ? `${CLAIM_APPROVED_DELIVERY_NOTE}\n\n${CLAIM_STATUS_TRACKING_NOTE}`
-                    : CLAIM_STATUS_TRACKING_NOTE}
-                </Text>
-              </Card.Content>
-            </Card>
-          </>
-        )}
-      </ScrollView>
       <LoadingOverlay
-        visible={!!queryId && statusQuery.isFetching}
-        message="Loading claim status…"
+        visible={Boolean(token) && claimsQuery.isPending && rows.length === 0}
+        message="Loading claims…"
       />
     </SafeAreaView>
   );
@@ -282,76 +393,147 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scroll: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-  },
-  intro: {
-    ...typography.subtitle,
-    marginBottom: spacing.lg,
-  },
-  card: {
-    marginBottom: 0,
-  },
-  cardTitle: {
-    ...typography.title,
-    marginBottom: spacing.md,
-  },
-  input: {
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-  },
-  loadBtn: {
-    marginTop: spacing.xs / 2,
-  },
-  hint: {
+  padTop: { paddingTop: spacing.sm },
+  headerBlock: {
     marginBottom: spacing.sm,
   },
-  muted: {
-    ...typography.subtitle,
-    marginTop: spacing.md,
-    textAlign: 'center',
+  searchInput: {
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
   },
-  error: {
-    ...typography.title,
+  searchOutline: {
+    borderRadius: 12,
+  },
+  listContent: {
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxl,
+  },
+  listEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  listMeta: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  rowCard: {
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  cardClip: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  statusCorner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 2,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderBottomRightRadius: 10,
+    maxWidth: '52%',
+  },
+  statusCornerText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  cardBody: {
+    /** Clears the top-left status ribbon */
+    paddingTop: spacing.sm + spacing.xs,
+  },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  clmBlock: {
+    marginBottom: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  clmLabel: {
+    color: colors.textMuted,
+    letterSpacing: 0.3,
+    marginBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    fontSize: 11,
+  },
+  clmValue: {
+    fontWeight: '800',
+    color: colors.secondary,
+    fontSize: 17,
+    letterSpacing: 0.4,
+    lineHeight: 24,
+  },
+  patient: {
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  muted: { color: colors.textMuted },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  amount: {
+    fontWeight: '700',
+    color: colors.secondary,
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  approvedHint: {
+    fontWeight: '500',
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  raised: {
+    marginTop: spacing.xs,
+    color: colors.textMuted,
+    opacity: 0.9,
+  },
+  eyeBtn: {
+    padding: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignSelf: 'flex-start',
+  },
+  eyeBtnPressed: {
+    opacity: 0.88,
+    backgroundColor: colors.surfaceVariant,
+  },
+  footerLoader: {
+    marginVertical: spacing.lg,
+  },
+  errorTitle: {
     color: colors.error,
     marginBottom: spacing.sm,
   },
-  label: {
-    ...typography.small,
-    marginBottom: 6,
+  retryBtn: {
+    marginTop: spacing.md,
   },
-  statusLabel: {
-    marginTop: spacing.lg,
-  },
-  claimId: {
-    ...typography.title,
-    fontSize: 22,
-    letterSpacing: 0.5,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  emptySearch: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
     gap: spacing.sm,
   },
-  chip: {
-    borderWidth: 1,
-  },
-  message: {
-    ...typography.body,
-    marginTop: spacing.lg,
-  },
-  noteCard: {
-    marginTop: spacing.xs / 2,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  noteTitle: {
-    ...typography.title,
-    fontSize: 16,
-    marginBottom: spacing.sm,
-  },
-  noteBody: {
-    ...typography.body,
+  emptySearchTitle: {
+    marginTop: spacing.sm,
+    color: colors.secondary,
+    fontWeight: '700',
   },
 });

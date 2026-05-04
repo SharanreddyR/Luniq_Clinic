@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,25 +19,18 @@ import {
   Card,
   HelperText,
   IconButton,
-  Menu,
-  RadioButton,
   Text,
   TextInput,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { StartVisitDoctorModal } from '@/components/patient/StartVisitDoctorModal';
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
 import { usePatientByCardMutation } from '@/hooks/usePatientByCardMutation';
-import { useDoctors } from '@/hooks/useDoctors';
-import type { Doctor } from '@/services/doctorService';
 import { resolveMemberPhotoUri } from '@/services/patientService';
-import {
-  fetchClinicVisitServicesCatalog,
-  startClinicVisit,
-} from '@/services/visitService';
 import {
   useIntakeVisitHandoffStore,
   usePatientStore,
@@ -51,6 +44,13 @@ const PHOTO_R = 32;
 const CARD_PREFIX = 'LNQ-';
 
 const SUGGESTED_SUFFIXES = ['120045', '778899', '230011'] as const;
+
+function paramString(v: string | string[] | undefined): string | undefined {
+  if (v == null) return undefined;
+  const s = Array.isArray(v) ? v[0] : v;
+  const t = typeof s === 'string' ? s.trim() : '';
+  return t || undefined;
+}
 
 function memberDisplayOrder(members: NonNullable<PatientRecord['members']>) {
   return members
@@ -101,31 +101,32 @@ function HighlightedText({
   );
 }
 
-type DoctorModalContext = {
-  base: PatientRecord;
-  memberIndex: number | null;
-};
-
 export default function PatientIntakeScreen() {
+  const params = useLocalSearchParams<{
+    card?: string;
+    memberIndex?: string;
+    notify?: string;
+  }>();
+
   const activePatient = usePatientStore((s) => s.activePatient);
-  const setActivePatient = usePatientStore((s) => s.setActivePatient);
   const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
   const clearVisitSession = usePatientStore((s) => s.clearVisitSession);
   const handoff = useIntakeVisitHandoffStore((s) => s.handoff);
-  const setHandoff = useIntakeVisitHandoffStore((s) => s.setHandoff);
   const clearHandoff = useIntakeVisitHandoffStore((s) => s.clearHandoff);
 
-  const doctorsQuery = useDoctors();
+  const [intakeNotifyFlow, setIntakeNotifyFlow] = useState(false);
+  const [intakeNotifyMemberIndex, setIntakeNotifyMemberIndex] = useState<
+    number | null
+  >(null);
+  const notifyDeepLinkHandledRef = useRef<string | null>(null);
+
   const { showSuccess } = useAppToast();
 
-  const [doctorModalVisible, setDoctorModalVisible] = useState(false);
-  const [doctorModalContext, setDoctorModalContext] =
-    useState<DoctorModalContext | null>(null);
-  const [modalDepartment, setModalDepartment] = useState<string | null>(null);
-  const [modalDoctor, setModalDoctor] = useState<Doctor | null>(null);
-  const [deptMenuOpen, setDeptMenuOpen] = useState(false);
-  const [modalSubmitting, setModalSubmitting] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
+  const [visitDoctorModalOpen, setVisitDoctorModalOpen] = useState(false);
+  const [visitDoctorModalCtx, setVisitDoctorModalCtx] = useState<{
+    base: PatientRecord;
+    memberIndex: number | null;
+  } | null>(null);
 
   const [inputSuffix, setInputSuffix] = useState('');
   const [lookupHit, setLookupHit] = useState<PatientRecord | null>(null);
@@ -146,39 +147,6 @@ export default function PatientIntakeScreen() {
   const scrollRef = useRef<ScrollView | null>(null);
   lookupRef.current = lookup;
 
-  const allDoctors = doctorsQuery.data ?? [];
-  const modalDepartments = useMemo(() => {
-    const d = new Set(
-      allDoctors.map((x) => x.department).filter((s) => s.trim().length > 0),
-    );
-    return [...d].sort((a, b) => a.localeCompare(b));
-  }, [allDoctors]);
-
-  const modalDoctorsInDept = useMemo(() => {
-    if (!modalDepartment) return [];
-    return allDoctors.filter((doc) => doc.department === modalDepartment);
-  }, [allDoctors, modalDepartment]);
-
-  useEffect(() => {
-    if (!doctorModalVisible) return;
-    if (modalDepartments.length === 0) return;
-    setModalDepartment((prev) => prev ?? modalDepartments[0]);
-  }, [doctorModalVisible, modalDepartments]);
-
-  useEffect(() => {
-    if (!doctorModalVisible || !modalDepartment) return;
-    setModalDoctor((doc) => {
-      if (doc && modalDoctorsInDept.some((d) => d.id === doc.id)) {
-        return doc;
-      }
-      return (
-        modalDoctorsInDept.find((d) => d.available) ??
-        modalDoctorsInDept[0] ??
-        null
-      );
-    });
-  }, [doctorModalVisible, modalDepartment, modalDoctorsInDept]);
-
   useEffect(() => {
     if (!lookupHit || lookup.isPending) return;
     const id = setTimeout(() => {
@@ -196,6 +164,9 @@ export default function PatientIntakeScreen() {
       const scanned = usePatientStore.getState().consumePendingCardInput();
       if (!scanned) return;
       clearHandoff();
+      setIntakeNotifyFlow(false);
+      setIntakeNotifyMemberIndex(null);
+      notifyDeepLinkHandledRef.current = null;
       setInputSuffix(normalizeCardSuffix(scanned));
       setLookupHit(null);
       setLookupError(null);
@@ -215,25 +186,55 @@ export default function PatientIntakeScreen() {
     }, []),
   );
 
-  function runLookup(raw: string) {
-    const normalized = normalizeCard(raw);
-    if (!normalized) return;
-    clearHandoff();
-    setLookupHit(null);
-    setLookupError(null);
-    lookup.mutate(normalized, {
-      onSuccess: (data) => {
-        setLookupHit(data);
-        setLookupError(null);
-      },
-      onError: (err) => {
-        setLookupHit(null);
-        setLookupError(
-          err instanceof Error ? err.message : 'Could not load patient',
+  const runLookup = useCallback(
+    (
+      raw: string,
+      opts?: { fromNotification: boolean; memberIndex: number | null },
+    ) => {
+      const normalized = normalizeCard(raw);
+      if (!normalized) return;
+      clearHandoff();
+      if (opts?.fromNotification) {
+        setIntakeNotifyFlow(true);
+        const mi = opts.memberIndex;
+        setIntakeNotifyMemberIndex(
+          mi != null && Number.isFinite(mi) && mi >= 0 ? mi : null,
         );
-      },
-    });
-  }
+      } else {
+        setIntakeNotifyFlow(false);
+        setIntakeNotifyMemberIndex(null);
+        notifyDeepLinkHandledRef.current = null;
+      }
+      setLookupHit(null);
+      setLookupError(null);
+      lookup.mutate(normalized, {
+        onSuccess: (data) => {
+          setLookupHit(data);
+          setLookupError(null);
+        },
+        onError: (err) => {
+          setLookupHit(null);
+          setLookupError(
+            err instanceof Error ? err.message : 'Could not load patient',
+          );
+        },
+      });
+    },
+    [clearHandoff, lookup],
+  );
+
+  useEffect(() => {
+    const cardRaw = paramString(params.card);
+    if (!cardRaw || params.notify !== '1') return;
+    const miRaw = paramString(params.memberIndex);
+    const mi =
+      miRaw != null && /^\d+$/.test(miRaw) ? Number(miRaw) : null;
+    const dedupeKey = `${cardRaw}:${miRaw ?? ''}`;
+    if (notifyDeepLinkHandledRef.current === dedupeKey) return;
+    notifyDeepLinkHandledRef.current = dedupeKey;
+    setInputSuffix(normalizeCardSuffix(cardRaw));
+    runLookup(cardRaw, { fromNotification: true, memberIndex: mi });
+  }, [params.card, params.memberIndex, params.notify, runLookup]);
 
   function openDoctorChoiceModal(
     base: PatientRecord,
@@ -241,64 +242,13 @@ export default function PatientIntakeScreen() {
   ) {
     const expiry = getMembershipExpiryInfo(base.expiresAt);
     if (base.isValid === false || expiry.isExpired) return;
-    setModalError(null);
-    setModalDepartment(null);
-    setModalDoctor(null);
-    setDoctorModalContext({ base, memberIndex });
-    setDoctorModalVisible(true);
+    setVisitDoctorModalCtx({ base, memberIndex });
+    setVisitDoctorModalOpen(true);
   }
 
-  function closeDoctorModal() {
-    if (modalSubmitting) return;
-    setDoctorModalVisible(false);
-    setDoctorModalContext(null);
-    setModalError(null);
-  }
-
-  async function onModalStartVisit() {
-    if (!doctorModalContext || !modalDoctor) return;
-    const effective = patientRecordForMember(
-      doctorModalContext.base,
-      doctorModalContext.memberIndex,
-    );
-    const hcId = effective.healthCardId;
-    if (hcId == null || !Number.isFinite(Number(hcId))) {
-      setModalError(
-        'This patient record has no health card id — visits cannot be started on the server.',
-      );
-      return;
-    }
-    setModalSubmitting(true);
-    setModalError(null);
-    try {
-      const visitMeta = await startClinicVisit({
-        healthCardId: Number(hcId),
-        personId: effective.id,
-        doctorId: modalDoctor.id,
-      });
-      const catalog = await fetchClinicVisitServicesCatalog();
-      setHandoff({
-        visitId: visitMeta.visit_id,
-        doctorId: modalDoctor.id,
-        doctorName: modalDoctor.name,
-        doctorDepartment: modalDoctor.department,
-        visitMeta,
-        catalog,
-      });
-      setActivePatient(effective);
-      setDoctorModalVisible(false);
-      setDoctorModalContext(null);
-      setLookupHit(null);
-      setLookupError(null);
-      lookup.reset();
-      showSuccess('Visit started. Tap Next to enter services and documents.');
-    } catch (e: unknown) {
-      const msg =
-        e instanceof Error ? e.message : 'Could not start visit.';
-      setModalError(msg);
-    } finally {
-      setModalSubmitting(false);
-    }
+  function closeVisitDoctorModal() {
+    setVisitDoctorModalOpen(false);
+    setVisitDoctorModalCtx(null);
   }
 
   function onChangePatient() {
@@ -308,6 +258,9 @@ export default function PatientIntakeScreen() {
     setLookupHit(null);
     setLookupError(null);
     setInputSuffix('');
+    setIntakeNotifyFlow(false);
+    setIntakeNotifyMemberIndex(null);
+    notifyDeepLinkHandledRef.current = null;
     lookup.reset();
   }
 
@@ -338,6 +291,15 @@ export default function PatientIntakeScreen() {
     if (!lookupHit?.members?.length) return [];
     return memberDisplayOrder(lookupHit.members);
   }, [lookupHit]);
+
+  const notifyMemberTargetValid = useMemo(() => {
+    if (!intakeNotifyFlow || !lookupHit?.members?.length) return false;
+    if (intakeNotifyMemberIndex == null) return false;
+    return (
+      intakeNotifyMemberIndex >= 0 &&
+      intakeNotifyMemberIndex < lookupHit.members.length
+    );
+  }, [intakeNotifyFlow, intakeNotifyMemberIndex, lookupHit]);
 
   const { width: windowWidth } = useWindowDimensions();
   const profilePreviewImageSize = Math.min(
@@ -619,7 +581,7 @@ export default function PatientIntakeScreen() {
                         contentStyle={styles.matchPrimaryBtnContent}
                         buttonColor={colors.primary}
                         textColor={colors.onPrimary}>
-                        Select doctor
+                        {intakeNotifyFlow ? 'Next' : 'Select doctor'}
                       </Button>
                     ) : null}
                   </View>
@@ -681,7 +643,11 @@ export default function PatientIntakeScreen() {
                               style={styles.linkedSimpleBtn}
                               labelStyle={styles.linkedSimpleBtnLabel}
                               textColor={colors.primary}>
-                              Select doctor
+                              {intakeNotifyFlow &&
+                              notifyMemberTargetValid &&
+                              index === intakeNotifyMemberIndex
+                                ? 'Next'
+                                : 'Select doctor'}
                             </Button>
                           ) : (
                             <Text style={styles.linkedBlockedLabel}>
@@ -750,143 +716,18 @@ export default function PatientIntakeScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={doctorModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeDoctorModal}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.doctorModalRoot}>
-          <Pressable
-            style={styles.doctorModalBackdrop}
-            onPress={closeDoctorModal}
-            disabled={modalSubmitting}
-            accessibilityLabel="Dismiss"
-          />
-          <View style={styles.doctorModalSheet} pointerEvents="box-none">
-            <View style={styles.doctorModalHeader}>
-              <Text variant="titleLarge" style={styles.doctorModalTitle}>
-                Select doctor
-              </Text>
-              <IconButton
-                icon="close"
-                onPress={closeDoctorModal}
-                disabled={modalSubmitting}
-                accessibilityLabel="Close"
-              />
-            </View>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.doctorModalScroll}
-              showsVerticalScrollIndicator={false}>
-              {doctorModalContext ? (
-                <Text variant="bodySmall" style={styles.doctorModalPatient}>
-                  {patientRecordForMember(
-                    doctorModalContext.base,
-                    doctorModalContext.memberIndex,
-                  ).name}
-                </Text>
-              ) : null}
-              {doctorsQuery.isPending && !doctorsQuery.data ? (
-                <View style={styles.doctorModalLoad}>
-                  <ActivityIndicator color={colors.primary} />
-                  <Text variant="bodySmall" style={styles.mutedLoad}>
-                    Loading doctors…
-                  </Text>
-                </View>
-              ) : null}
-              {doctorsQuery.isError ? (
-                <Text variant="bodySmall" style={styles.doctorModalErr}>
-                  Could not load doctors. Try again later.
-                </Text>
-              ) : null}
-              <Text variant="labelLarge" style={styles.doctorFieldLabel}>
-                Department
-              </Text>
-              <Menu
-                visible={deptMenuOpen}
-                onDismiss={() => setDeptMenuOpen(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setDeptMenuOpen(true)}
-                    disabled={
-                      modalSubmitting || modalDepartments.length === 0
-                    }
-                    style={styles.doctorMenuBtn}
-                    contentStyle={styles.doctorMenuBtnContent}>
-                    {modalDepartment ?? 'Choose department'}
-                  </Button>
-                }>
-                {modalDepartments.map((d) => (
-                  <Menu.Item
-                    key={d}
-                    title={d}
-                    onPress={() => {
-                      setModalDepartment(d);
-                      setDeptMenuOpen(false);
-                    }}
-                  />
-                ))}
-              </Menu>
-              <Text
-                variant="labelLarge"
-                style={[styles.doctorFieldLabel, styles.doctorFieldSpacer]}>
-                Doctor
-              </Text>
-              {!modalDepartment ? (
-                <HelperText type="info" visible>
-                  Select a department to see doctors.
-                </HelperText>
-              ) : modalDoctorsInDept.length === 0 ? (
-                <HelperText type="info" visible>
-                  No doctors listed for this department.
-                </HelperText>
-              ) : (
-                <RadioButton.Group
-                  value={modalDoctor ? String(modalDoctor.id) : ''}
-                  onValueChange={(value) => {
-                    const id = Number(value);
-                    const next = modalDoctorsInDept.find((doc) => doc.id === id);
-                    if (next) setModalDoctor(next);
-                  }}>
-                  {modalDoctorsInDept.map((d) => (
-                    <RadioButton.Item
-                      key={d.id}
-                      value={String(d.id)}
-                      label={`${d.name}${d.available ? '' : ' (off roster)'} · ${d.timing}`}
-                      position="leading"
-                    />
-                  ))}
-                </RadioButton.Group>
-              )}
-              {modalError ? (
-                <HelperText type="error" visible style={styles.modalErrText}>
-                  {modalError}
-                </HelperText>
-              ) : null}
-            </ScrollView>
-            <View style={styles.doctorModalFooter}>
-              <Button
-                mode="outlined"
-                onPress={closeDoctorModal}
-                disabled={modalSubmitting}
-                style={styles.doctorModalFooterBtn}>
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                onPress={() => void onModalStartVisit()}
-                loading={modalSubmitting}
-                disabled={!modalDoctor || modalSubmitting}
-                style={styles.doctorModalFooterBtn}>
-                Start visit
-              </Button>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      <StartVisitDoctorModal
+        visible={visitDoctorModalOpen && visitDoctorModalCtx != null}
+        base={visitDoctorModalCtx?.base ?? null}
+        memberIndex={visitDoctorModalCtx?.memberIndex ?? null}
+        onClose={closeVisitDoctorModal}
+        onVisitStarted={() => {
+          setLookupHit(null);
+          setLookupError(null);
+          lookup.reset();
+          showSuccess('Visit started. Tap Next to enter services and documents.');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1386,66 +1227,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffef99',
     borderRadius: 4,
   },
-  doctorModalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  doctorModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(6, 45, 47, 0.45)',
-  },
-  doctorModalSheet: {
-    maxHeight: '88%',
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    paddingBottom: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  doctorModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.xs,
-    paddingTop: spacing.sm,
-  },
-  doctorModalTitle: { color: colors.secondary, fontWeight: '700' },
-  doctorModalScroll: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  doctorModalPatient: {
-    color: colors.textMuted,
-    marginBottom: spacing.md,
-  },
-  doctorModalLoad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  mutedLoad: { color: colors.textMuted },
-  doctorModalErr: { color: '#991B1B', marginBottom: spacing.sm },
-  doctorFieldLabel: { marginBottom: spacing.xs, color: colors.secondary },
-  doctorFieldSpacer: { marginTop: spacing.md },
-  doctorMenuBtn: {
-    alignSelf: 'stretch',
-    borderColor: colors.border,
-    marginBottom: spacing.xs,
-  },
-  doctorMenuBtnContent: { justifyContent: 'flex-start' },
-  modalErrText: { marginTop: spacing.sm },
-  doctorModalFooter: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  doctorModalFooterBtn: { flex: 1 },
   resumeCard: {
     marginBottom: spacing.lg,
     borderWidth: 2,
