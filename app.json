@@ -15,6 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.luniqcare.clinicapp",
+      "googleServicesFile": "./credentials/GoogleService-Info.plist",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -24,6 +25,7 @@
       }
     },
     "android": {
+      "googleServicesFile": "./credentials/google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
@@ -62,9 +64,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b3673243-0bc1-488c-a312-541f1a031324"
+        "projectId": "3985e5ba-f1a8-4f67-8ffc-a690c139f8bc"
       }
     },
-    "owner": "LuniqCare"
+    "owner": "luniqcare"
   }
 }

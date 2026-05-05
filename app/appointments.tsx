@@ -108,10 +108,13 @@ export default function AppointmentsScreen() {
             key={s}
             selected={statusFilter === s}
             onPress={() => setStatusFilter(s)}
-            style={styles.filterChip}
+            style={[
+              styles.filterChip,
+              statusFilter === s ? styles.filterChipSelected : styles.filterChipUnselected,
+            ]}
             mode={statusFilter === s ? 'flat' : 'outlined'}
-            selectedColor={colors.onPrimary}
-            showSelectedOverlay>
+            textStyle={styles.filterChipLabel}
+            showSelectedOverlay={false}>
             {STATUS_LABELS[s]}
           </Chip>
         ))}
@@ -339,25 +342,19 @@ function EmptyCard({ message }: { message: string }) {
   );
 }
 
-function statusChipStyle(status: ClinicAppointmentStatus): {
-  bg: string;
-  text: string;
-} {
+function statusChipStyle(status: ClinicAppointmentStatus): { bg: string } {
   switch (status) {
     case 'pending':
-      return {
-        bg: colors.surfaceVariant,
-        text: colors.secondaryElevated,
-      };
+      return { bg: colors.surfaceVariant };
     case 'confirmed':
-      return { bg: 'rgba(27, 122, 108, 0.14)', text: colors.success };
+      return { bg: 'rgba(27, 122, 108, 0.14)' };
     case 'completed':
-      return { bg: 'rgba(59, 91, 140, 0.12)', text: colors.secondary };
+      return { bg: 'rgba(59, 91, 140, 0.12)' };
     case 'rejected':
-      return { bg: 'rgba(176, 0, 32, 0.1)', text: colors.error };
+      return { bg: 'rgba(176, 0, 32, 0.1)' };
     case 'cancelled':
     default:
-      return { bg: colors.surfaceVariant, text: colors.textMuted };
+      return { bg: colors.surfaceVariant };
   }
 }
 
@@ -380,7 +377,7 @@ function AppointmentCard({
   onReject: () => void;
   onCall: () => void;
 }) {
-  const chipStyle = statusChipStyle(item.status);
+  const statusBg = statusChipStyle(item.status).bg;
   const showActions = listStatus === 'pending' && item.status === 'pending';
   const canCall = Boolean(item.contactPhone?.trim());
 
@@ -417,8 +414,8 @@ function AppointmentCard({
           <Chip
             compact
             mode="flat"
-            style={[styles.statusChip, { backgroundColor: chipStyle.bg }]}
-            textStyle={{ color: chipStyle.text, fontWeight: '600' }}>
+            style={[styles.statusChip, { backgroundColor: statusBg }]}
+            textStyle={styles.statusChipLabel}>
             {STATUS_LABELS[item.status]}
           </Chip>
         </View>
@@ -480,6 +477,20 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     marginRight: 4,
+  },
+  filterChipSelected: {
+    backgroundColor: colors.primary,
+  },
+  filterChipUnselected: {
+    backgroundColor: colors.surface,
+  },
+  filterChipLabel: {
+    color: '#000000',
+    fontWeight: '600',
+  },
+  statusChipLabel: {
+    color: '#000000',
+    fontWeight: '600',
   },
   scroll: {
     paddingTop: spacing.xs,
