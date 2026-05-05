@@ -9,6 +9,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   HelperText,
@@ -50,6 +51,7 @@ export function StartVisitDoctorModal({
   onClose,
   onVisitStarted,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const setHandoff = useIntakeVisitHandoffStore((s) => s.setHandoff);
   const setActivePatient = usePatientStore((s) => s.setActivePatient);
 
@@ -152,11 +154,18 @@ export function StartVisitDoctorModal({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={closeModal}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.doctorModalRoot}>
+        style={[
+          styles.doctorModalRoot,
+          {
+            paddingTop: spacing.md + insets.top,
+            paddingBottom: spacing.md + insets.bottom,
+            paddingHorizontal: spacing.lg,
+          },
+        ]}>
         <Pressable
           style={styles.doctorModalBackdrop}
           onPress={closeModal}
@@ -287,20 +296,23 @@ export function StartVisitDoctorModal({
 const styles = StyleSheet.create({
   doctorModalRoot: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   doctorModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(6, 45, 47, 0.45)',
   },
   doctorModalSheet: {
-    maxHeight: '88%',
+    maxHeight: '85%',
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
+    borderRadius: radii.lg,
     paddingBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
   },
   doctorModalHeader: {
     flexDirection: 'row',

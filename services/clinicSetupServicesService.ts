@@ -299,3 +299,34 @@ export async function saveClinicSetupServices(
   }
 }
 
+/**
+ * POST /clinic/setup/complete — marks clinic setup complete (go live).
+ * Backend may return 422 with validation messages if profile, doctors, or services are missing.
+ */
+export async function completeClinicSetup(): Promise<{ message: string }> {
+  try {
+    const { data } = await api.post<{ success?: boolean; message?: string }>(
+      '/clinic/setup/complete',
+      {},
+    );
+    const message =
+      data &&
+      typeof data === 'object' &&
+      typeof data.message === 'string' &&
+      data.message.trim()
+        ? data.message.trim()
+        : 'Setup complete.';
+    if (
+      data &&
+      typeof data === 'object' &&
+      'success' in data &&
+      data.success === false
+    ) {
+      throw new Error(message);
+    }
+    return { message };
+  } catch (err) {
+    throw new Error(apiErrorMessage(err));
+  }
+}
+

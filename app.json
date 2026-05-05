@@ -1,44 +1,36 @@
 {
   "expo": {
-    "name": "Luniq Clinics",
-    "slug": "clinic-app",
+    "owner": "luniqcare",
+    "name": "Luniq Clinic",
+    "slug": "luniq-clinic",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
-    "scheme": "clinicapp",
+    "icon": "./assets/images/icon.png",
+    "scheme": "luniq-clinic",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/logo.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "bundleIdentifier": "com.luniqcare.clinicapp",
-      "googleServicesFile": "./credentials/GoogleService-Info.plist",
       "supportsTablet": true,
-      "config": {
-        "usesNonExemptEncryption": false
-      },
+      "bundleIdentifier": "com.luniqcare.clinicapp",
       "infoPlist": {
-        "CFBundleDisplayName": "Luniq Clinics"
+        "CFBundleDisplayName": "Luniq Clinic"
       }
     },
     "android": {
-      "googleServicesFile": "./credentials/google-services.json",
-      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
+      "package": "com.luniqcare.clinicapp",
+      "googleServicesFile": "./credentials/google-services.json",
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS"
-      ],
-      "package": "com.luniqcare.clinicapp"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -47,16 +39,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-document-picker",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to scan patient card barcodes."
-        }
-      ],
-      "expo-mail-composer",
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo.png",
+          "color": "#2ebdb4",
+          "defaultChannel": "luniq_clinic_default",
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -64,9 +58,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "3985e5ba-f1a8-4f67-8ffc-a690c139f8bc"
+        "projectId": "a8747032-54ba-4867-8b6e-5d7bddd86b04"
       }
-    },
-    "owner": "luniqcare"
+    }
   }
 }

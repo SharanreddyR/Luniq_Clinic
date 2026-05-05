@@ -5,6 +5,7 @@ import { AppState, Platform } from 'react-native';
 
 import { NOTIFICATIONS_QUERY_KEY } from '@/hooks/useNotifications';
 import { useAppToast } from '@/hooks/useAppToast';
+import { ensureLuniqClinicAndroidNotificationChannel } from '@/services/androidNotificationChannel';
 import { logFcmSyncError, syncFcmTokenWithBackend } from '@/services/fcmTokenService';
 import { subscribeFirebaseTokenRefresh } from '@/services/firebaseMessaging';
 import {
@@ -27,6 +28,9 @@ export function PushNotificationBootstrap() {
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
+    if (!isRunningInExpoGo()) {
+      void ensureLuniqClinicAndroidNotificationChannel();
+    }
     const removeTap = subscribeToNotificationResponses();
     void recordInitialNotificationResponse();
     return removeTap;

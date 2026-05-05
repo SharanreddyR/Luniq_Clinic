@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -18,6 +19,7 @@ import { BrandLogoMark } from '@/components/ClinicLogo';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicProfile } from '@/hooks/useClinicProfile';
+import { completeClinicSetup } from '@/services/clinicSetupServicesService';
 import { useAuthStore } from '@/store';
 import { clearAllPersistedAppState } from '@/utils/clearAppPersistence';
 
@@ -33,11 +35,18 @@ function initialsFor(name: string): string {
 }
 
 export default function ProfileScreen() {
+  const queryClient = useQueryClient();
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
   const clinicProfileQuery = useClinicProfile();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
+  const [goLiveSubmitting, setGoLiveSubmitting] = useState(false);
+  const [goLiveDialog, setGoLiveDialog] = useState<{
+    visible: boolean;
+    message: string;
+    isError: boolean;
+  }>({ visible: false, message: '', isError: false });
 
   const remote = clinicProfileQuery.data;
   const staffName =
@@ -80,6 +89,24 @@ export default function ProfileScreen() {
       router.replace('/login');
     } finally {
       setLoggingOut(false);
+    }
+  }
+
+  async function onGoLive() {
+    if (goLiveSubmitting) return;
+    setGoLiveSubmitting(true);
+    try {
+      const { message } = await completeClinicSetup();
+      setGoLiveDialog({ visible: true, message, isError: false });
+      void queryClient.invalidateQueries({ queryKey: ['clinic-profile'] });
+    } catch (e) {
+      const message =
+        e instanceof Error && e.message.trim()
+          ? e.message.trim()
+          : 'Could not complete setup.';
+      setGoLiveDialog({ visible: true, message, isError: true });
+    } finally {
+      setGoLiveSubmitting(false);
     }
   }
 
@@ -259,6 +286,32 @@ export default function ProfileScreen() {
               </Text>
               <List.Section style={styles.listSection}>
                 <List.Item
+                  title="Go live"
+                  description="Finish setup so your clinic appears to patients on Luniq"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => void onGoLive()}
+                  disabled={goLiveSubmitting}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="rocket-launch-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                  right={() =>
+                    goLiveSubmitting ? (
+                      <View style={styles.goLiveRight}>
+                        <Text variant="labelSmall" style={styles.goLiveWorking}>
+                          Working…
+                        </Text>
+                      </View>
+                    ) : undefined
+                  }
+                />
+                <List.Item
                   title="Appointments"
                   description="Manage upcoming visits and follow-ups"
                   titleStyle={styles.listTitle}
@@ -314,6 +367,34 @@ export default function ProfileScreen() {
     </SafeAreaView>
 
     <Portal>
+      <Dialog
+        visible={goLiveDialog.visible}
+        onDismiss={() => setGoLiveDialog((s) => ({ ...s, visible: false }))}
+        dismissable
+        style={styles.logoutDialog}>
+        <Dialog.Title style={goLiveDialog.isError ? styles.goLiveTitleErr : undefined}>
+          {goLiveDialog.isError ? 'Go live' : 'Clinic is live'}
+        </Dialog.Title>
+        <Dialog.Content>
+          <Text
+            variant="bodyMedium"
+            style={[
+              styles.logoutDialogBody,
+              goLiveDialog.isError && styles.goLiveBodyErr,
+            ]}>
+            {goLiveDialog.message}
+          </Text>
+        </Dialog.Content>
+        <Dialog.Actions style={styles.logoutDialogActions}>
+          <Button
+            mode="contained"
+            onPress={() => setGoLiveDialog((s) => ({ ...s, visible: false }))}
+            buttonColor={colors.primary}
+            textColor={colors.onPrimary}>
+            OK
+          </Button>
+        </Dialog.Actions>
+      </Dialog>
       <Dialog
         visible={logoutDialogVisible}
         onDismiss={() => {
@@ -580,5 +661,18 @@ const styles = StyleSheet.create({
   },
   logoutDialogCancel: {
     borderColor: colors.border,
+  },
+  goLiveRight: {
+    justifyContent: 'center',
+    paddingRight: spacing.xs,
+  },
+  goLiveWorking: {
+    color: colors.textMuted,
+  },
+  goLiveTitleErr: {
+    color: colors.error,
+  },
+  goLiveBodyErr: {
+    color: colors.secondary,
   },
 });

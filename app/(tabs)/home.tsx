@@ -254,16 +254,16 @@ export default function ClinicDashboardScreen() {
                       size={20}
                       color={token ? colors.secondary : colors.textMuted}
                     />
+                    {token && unreadNotifications > 0 ? (
+                      <View style={styles.notifyBadge}>
+                        <Text variant="labelSmall" style={styles.notifyBadgeText}>
+                          {unreadNotifications > 99
+                            ? '99+'
+                            : String(unreadNotifications)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
-                  {token && unreadNotifications > 0 ? (
-                    <View style={styles.notifyBadge}>
-                      <Text variant="labelSmall" style={styles.notifyBadgeText}>
-                        {unreadNotifications > 99
-                          ? '99+'
-                          : String(unreadNotifications)}
-                      </Text>
-                    </View>
-                  ) : null}
                 </Pressable>
                 <Pressable
                   onPress={goProfile}
@@ -508,8 +508,10 @@ const styles = StyleSheet.create({
   },
   notifyWrap: {
     position: 'relative',
+    zIndex: 1,
   },
   notifyBtn: {
+    position: 'relative',
     width: 44,
     height: 44,
     borderRadius: 14,
@@ -518,14 +520,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
     ...shadows.card,
     shadowOpacity: 0.06,
     elevation: 2,
   },
   notifyBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -2,
+    right: -2,
+    zIndex: 10,
     minWidth: 18,
     height: 18,
     paddingHorizontal: 5,
@@ -535,6 +539,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+    elevation: 8,
   },
   notifyBadgeText: {
     color: '#FFFFFF',
