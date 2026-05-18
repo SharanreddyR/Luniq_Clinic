@@ -1,5 +1,4 @@
 import { isRunningInExpoGo } from 'expo';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import {
@@ -7,8 +6,13 @@ import {
   ANDROID_NOTIFICATION_CHANNEL_NAME,
 } from '@/constants/notifications';
 
+/**
+ * Creates the Android notification channel used by FCM payloads.
+ * Uses dynamic import so `expo-notifications` is never loaded in Expo Go (SDK 53+ crashes on Android).
+ */
 export async function ensureLuniqClinicAndroidNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android' || isRunningInExpoGo()) return;
+  const Notifications = await import('expo-notifications');
   await Notifications.setNotificationChannelAsync(ANDROID_FCM_CHANNEL_ID, {
     name: ANDROID_NOTIFICATION_CHANNEL_NAME,
     importance: Notifications.AndroidImportance.HIGH,

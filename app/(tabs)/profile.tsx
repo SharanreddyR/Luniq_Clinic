@@ -1,8 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import {
   Avatar,
   Button,
@@ -15,15 +25,33 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, type Href } from 'expo-router';
 
+import { ClaimCameraModal } from '@/components/ClaimCameraModal';
 import { BrandLogoMark } from '@/components/ClinicLogo';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicProfile } from '@/hooks/useClinicProfile';
 import { completeClinicSetup } from '@/services/clinicSetupServicesService';
+import {
+  updateClinicProfileLogo,
+  updateProfilePhoto,
+  uploadImageToR2,
+} from '@/services/clinicProfileService';
 import { useAuthStore } from '@/store';
 import { clearAllPersistedAppState } from '@/utils/clearAppPersistence';
 
 const HERO_COLORS = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
+
+type PhotoKind = 'personal' | 'logo';
+
+function looksLikeImageAsset(asset: {
+  uri: string;
+  mimeType?: string | null;
+  name?: string | null;
+}): boolean {
+  const mime = asset.mimeType?.toLowerCase() ?? '';
+  if (mime.startsWith('image/')) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif)(\?|$)/i.test(asset.uri);
+}
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -38,8 +66,14 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const clinicProfileQuery = useClinicProfile();
   const [loggingOut, setLoggingOut] = useState(false);
+  /** Staff profile photo upload in progress */
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraKind, setCameraKind] = useState<PhotoKind | null>(null);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const [goLiveSubmitting, setGoLiveSubmitting] = useState(false);
   const [goLiveDialog, setGoLiveDialog] = useState<{
@@ -60,6 +94,90 @@ export default function ProfileScreen() {
   const addressLine = [remote?.address, remote?.city, remote?.state, remote?.pincode]
     .filter((x): x is string => Boolean(x && x.trim()))
     .join(', ');
+  const profilePhotoUri = remote?.profilePhotoUrl?.trim() ?? '';
+
+  async function runPhotoPipeline(
+    kind: PhotoKind,
+    uri: string,
+    meta?: { name?: string | null; mimeType?: string | null },
+  ) {
+    const setBusy = kind === 'personal' ? setPhotoUploading : setLogoBusy;
+    setBusy(true);
+    try {
+      if (kind === 'personal') {
+        const { path } = await uploadImageToR2(uri, 'profile', meta);
+        await updateProfilePhoto(path);
+      } else {
+        const { path } = await uploadImageToR2(uri, 'clinic_logo', meta);
+        await updateClinicProfileLogo(path);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['clinic-profile'] });
+      Alert.alert(
+        'Saved',
+        kind === 'personal'
+          ? 'Your profile photo was updated.'
+          : 'Clinic logo was updated.',
+      );
+    } catch (e) {
+      let message = 'Could not update. Try again.';
+      if (axios.isAxiosError(e)) {
+        if (e.code === 'ERR_NETWORK' || e.message === 'Network Error') {
+          message =
+            'Network error — check your connection, VPN, and EXPO_PUBLIC_API_URL (must reach /api/v1).';
+        } else {
+          const body = e.response?.data as { message?: string } | undefined;
+          message =
+            body?.message?.trim() ||
+            e.response?.statusText?.trim() ||
+            e.message?.trim() ||
+            message;
+        }
+      } else if (e instanceof Error && e.message.trim()) {
+        message = e.message.trim();
+      }
+      Alert.alert('Update failed', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openPhotoSourceSheet(kind: PhotoKind) {
+    if (!token) return;
+    const title = kind === 'personal' ? 'Profile photo' : 'Clinic logo';
+    Alert.alert(title, 'Choose a source', [
+      {
+        text: 'Take photo',
+        onPress: () => {
+          setCameraKind(kind);
+          setCameraOpen(true);
+        },
+      },
+      {
+        text: 'Photo library',
+        onPress: () => void pickFromLibrary(kind),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function pickFromLibrary(kind: PhotoKind) {
+    if (!token) return;
+    const res = await DocumentPicker.getDocumentAsync({
+      type: 'image/*',
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    const asset = res.assets[0];
+    if (!asset.uri || !looksLikeImageAsset(asset)) {
+      Alert.alert('Not an image', 'Please choose a JPG, PNG, or WebP file.');
+      return;
+    }
+    await runPhotoPipeline(kind, asset.uri, {
+      name: asset.name,
+      mimeType: asset.mimeType,
+    });
+  }
+
   const stats = [
     {
       key: 'appointments',
@@ -86,7 +204,7 @@ export default function ProfileScreen() {
     try {
       await clearAllPersistedAppState();
       setLogoutDialogVisible(false);
-      router.replace('/login');
+      router.replace('/welcome');
     } finally {
       setLoggingOut(false);
     }
@@ -142,14 +260,50 @@ export default function ProfileScreen() {
             </View>
           </View>
           <View style={styles.heroProfileRow}>
-            <View style={styles.heroAvatarRing}>
-              <Avatar.Text
-                size={84}
-                label={initialsFor(staffName)}
-                style={styles.heroAvatar}
-                labelStyle={styles.heroAvatarLabel}
-              />
-            </View>
+            <Pressable
+              onPress={() => openPhotoSourceSheet('personal')}
+              disabled={!token || photoUploading || logoBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Change your profile photo"
+              style={({ pressed }) => [
+                styles.heroAvatarPressable,
+                (!token || photoUploading || logoBusy) &&
+                  styles.heroAvatarPressableDisabled,
+                pressed &&
+                  token &&
+                  !photoUploading &&
+                  !logoBusy &&
+                  styles.heroAvatarPressablePressed,
+              ]}>
+              <View style={styles.heroAvatarRing}>
+                {profilePhotoUri ? (
+                  <Image
+                    source={{ uri: profilePhotoUri }}
+                    style={styles.heroAvatarImage}
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : (
+                  <Avatar.Text
+                    size={84}
+                    label={initialsFor(staffName)}
+                    style={styles.heroAvatar}
+                    labelStyle={styles.heroAvatarLabel}
+                  />
+                )}
+                {photoUploading ? (
+                  <View style={styles.heroAvatarLoading}>
+                    <ActivityIndicator color={colors.primary} size="large" />
+                  </View>
+                ) : null}
+                <View style={styles.heroAvatarCameraBadge} pointerEvents="none">
+                  <MaterialCommunityIcons
+                    name="camera"
+                    size={18}
+                    color={colors.onPrimary}
+                  />
+                </View>
+              </View>
+            </Pressable>
             <View style={styles.heroProfileTexts}>
               <Text variant="labelLarge" style={styles.heroProfileKicker}>
                 Your profile
@@ -246,6 +400,54 @@ export default function ProfileScreen() {
                       />
                     </View>
                   )}
+                />
+                <List.Item
+                  title="Profile photo"
+                  description="Your picture as clinic staff"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => openPhotoSourceSheet('personal')}
+                  disabled={!token || photoUploading || logoBusy}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="account-circle-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                  right={() =>
+                    photoUploading ? (
+                      <View style={styles.photoRowRight}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      </View>
+                    ) : undefined
+                  }
+                />
+                <List.Item
+                  title="Clinic logo"
+                  description="Shown with your clinic on Luniq"
+                  titleStyle={styles.listTitle}
+                  descriptionStyle={styles.listDesc}
+                  onPress={() => openPhotoSourceSheet('logo')}
+                  disabled={!token || photoUploading || logoBusy}
+                  left={() => (
+                    <View style={styles.rowIcon}>
+                      <MaterialCommunityIcons
+                        name="storefront-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                  right={() =>
+                    logoBusy ? (
+                      <View style={styles.photoRowRight}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      </View>
+                    ) : undefined
+                  }
                 />
                 {addressLine ? (
                   <List.Item
@@ -429,6 +631,24 @@ export default function ProfileScreen() {
         </Dialog.Actions>
       </Dialog>
     </Portal>
+
+    <ClaimCameraModal
+      visible={cameraOpen}
+      onClose={() => {
+        setCameraOpen(false);
+        setCameraKind(null);
+      }}
+      onCaptured={(asset) => {
+        const kind = cameraKind;
+        setCameraOpen(false);
+        setCameraKind(null);
+        if (!kind || !asset.uri) return;
+        void runPhotoPipeline(kind, asset.uri, {
+          name: asset.name,
+          mimeType: asset.mimeType,
+        });
+      }}
+    />
     </>
   );
 }
@@ -486,11 +706,48 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingBottom: spacing.sm,
   },
+  heroAvatarPressable: {
+    borderRadius: 52,
+  },
+  heroAvatarPressableDisabled: {
+    opacity: 0.65,
+  },
+  heroAvatarPressablePressed: {
+    opacity: 0.92,
+  },
   heroAvatarRing: {
     borderRadius: 48,
     padding: 3,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.55)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroAvatarImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  heroAvatarLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 42,
+  },
+  heroAvatarCameraBadge: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   heroAvatar: {
     backgroundColor: 'rgba(255,255,255,0.94)',
@@ -674,5 +931,10 @@ const styles = StyleSheet.create({
   },
   goLiveBodyErr: {
     color: colors.secondary,
+  },
+  photoRowRight: {
+    justifyContent: 'center',
+    paddingRight: spacing.xs,
+    minWidth: 36,
   },
 });

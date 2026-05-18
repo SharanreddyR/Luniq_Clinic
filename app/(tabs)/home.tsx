@@ -59,7 +59,7 @@ const DASHBOARD_CARDS: {
   },
   {
     key: 'appointments',
-    title: 'Appointments',
+    title: 'View Appointments',
     subtitle: 'Today, upcoming, and visit status',
     icon: { pack: 'material', name: 'calendar' },
     href: '/appointments',
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     color: colors.secondary,
     fontWeight: '800',
     lineHeight: 20,
-    fontSize: 14,
+    fontSize: 11,
     letterSpacing: -0.2,
   },
   summaryRow: {

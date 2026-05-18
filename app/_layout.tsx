@@ -2,29 +2,17 @@ import '../registerFirebaseMessagingBackground';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { AppBootScreen } from '@/components/auth/AppBootScreen';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { colors } from '@/constants/Colors';
 import { isRunningInExpoGo } from 'expo';
 import { useFonts } from 'expo-font';
-import * as Notifications from 'expo-notifications';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
-
-if (Platform.OS !== 'web' && !isRunningInExpoGo()) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-}
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -41,13 +29,38 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
+    if (Platform.OS === 'web' || isRunningInExpoGo()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        if (cancelled) return;
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+          }),
+        });
+      } catch {
+        /* dev client / missing native module */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
 
   if (!loaded) {
-    return null;
+    return <AppBootScreen />;
   }
 
   return (
@@ -60,6 +73,7 @@ export default function RootLayout() {
           animation: 'fade',
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="welcome" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="(tabs)" />

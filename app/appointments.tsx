@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { clinicScreen, spacing, typography } from '@/constants';
+import { clinicScreen, radii, SCREEN_EDGE, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useAppToast } from '@/hooks/useAppToast';
 import { useClinicAppointments } from '@/hooks/useAppointments';
@@ -103,21 +103,29 @@ export default function AppointmentsScreen() {
         showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}>
-        {CLINIC_APPOINTMENT_STATUSES.map((s) => (
-          <Chip
-            key={s}
-            selected={statusFilter === s}
-            onPress={() => setStatusFilter(s)}
-            style={[
-              styles.filterChip,
-              statusFilter === s ? styles.filterChipSelected : styles.filterChipUnselected,
-            ]}
-            mode={statusFilter === s ? 'flat' : 'outlined'}
-            textStyle={styles.filterChipLabel}
-            showSelectedOverlay={false}>
-            {STATUS_LABELS[s]}
-          </Chip>
-        ))}
+        {CLINIC_APPOINTMENT_STATUSES.map((s) => {
+          const selected = statusFilter === s;
+          return (
+            <Chip
+              key={s}
+              selected={selected}
+              onPress={() => setStatusFilter(s)}
+              style={[
+                styles.filterChip,
+                selected ? styles.filterChipSelected : styles.filterChipUnselected,
+              ]}
+              mode={selected ? 'flat' : 'outlined'}
+              textStyle={[
+                styles.filterChipLabel,
+                selected ? styles.filterChipLabelSelected : styles.filterChipLabelUnselected,
+              ]}
+              showSelectedOverlay={false}
+              showSelectedCheck={false}
+              compact={false}>
+              {STATUS_LABELS[s]}
+            </Chip>
+          );
+        })}
       </ScrollView>
 
       <ScrollView
@@ -332,8 +340,8 @@ function SectionTitle({ title }: { title: string }) {
 
 function EmptyCard({ message }: { message: string }) {
   return (
-    <Card style={[clinicScreen.card, styles.card]} mode="outlined">
-      <Card.Content>
+    <Card style={[clinicScreen.cardOutlined, styles.emptyCard]} mode="outlined">
+      <Card.Content style={styles.emptyCardContent}>
         <Text variant="bodyMedium" style={styles.empty}>
           {message}
         </Text>
@@ -465,36 +473,60 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   filterScroll: {
-    maxHeight: 52,
     flexGrow: 0,
+    marginBottom: spacing.xs,
   },
   filterRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    paddingHorizontal: SCREEN_EDGE,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     alignItems: 'center',
   },
   filterChip: {
-    marginRight: 4,
+    height: 40,
+    minWidth: 88,
+    borderRadius: radii.pill,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
   },
   filterChipSelected: {
     backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterChipUnselected: {
     backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   filterChipLabel: {
-    color: '#000000',
     fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 18,
+    marginHorizontal: 0,
+    marginVertical: 0,
+  },
+  filterChipLabelSelected: {
+    color: colors.surface,
+  },
+  filterChipLabelUnselected: {
+    color: colors.text,
   },
   statusChipLabel: {
     color: '#000000',
     fontWeight: '600',
   },
   scroll: {
-    paddingTop: spacing.xs,
+    paddingTop: 0,
     paddingBottom: spacing.xl,
+  },
+  emptyCard: {
+    marginBottom: spacing.md,
+    borderColor: colors.border,
+  },
+  emptyCardContent: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   sectionTitle: {
     marginTop: spacing.sm,
@@ -554,6 +586,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
+    marginVertical: 0,
   },
   centered: {
     paddingVertical: 40,

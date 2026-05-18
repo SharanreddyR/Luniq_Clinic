@@ -18,8 +18,8 @@ import { BrandLogoMark } from '@/components/ClinicLogo';
 import { APP_NAME, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 
-/** Teal clinical gradient aligned with app shell. */
-const AUTH_GRADIENT = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
+/** Teal clinical gradient — shared with auth screens and hydration splash. */
+export const AUTH_GRADIENT = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
 
 const CARD_TOP_RADIUS = 26;
 
@@ -88,8 +88,9 @@ export const AuthScaffold = forwardRef<ScrollView, AuthScaffoldProps>(
             ) : null}
 
             <View style={styles.brandRow}>
-              <BrandLogoMark size={52} padded />
-              <AuthWordmark />
+              <BrandLogoMark size={64} padded={false} />
+              <Text style={styles.welcomeHeading}>Welcome</Text>
+              <Text style={styles.welcomeSubline}>{APP_NAME}</Text>
             </View>
 
             <View style={styles.cardShell}>
@@ -184,9 +185,25 @@ const styles = StyleSheet.create({
   },
   brandRow: {
     alignItems: 'center',
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     paddingHorizontal: spacing.lg,
+  },
+  welcomeHeading: {
+    marginTop: spacing.lg,
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+    textAlign: 'center',
+  },
+  welcomeSubline: {
+    marginTop: spacing.xs,
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.88)',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   wordmark: {
     flexDirection: 'row',

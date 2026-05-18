@@ -10,10 +10,11 @@ import { INTAKE_UPLOAD_ROWS } from '@/constants/intakeUploads';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 import type { UploadCategory } from '@/services/uploadService';
-import type { ClinicVisitRecord } from '@/types/visitHistory';
+import type { ClinicVisitRecord, VisitAttachmentCategory } from '@/types/visitHistory';
 import { useVisitHistoryStore } from '@/store';
 
-function categoryLabel(category: UploadCategory): string {
+function categoryLabel(category: VisitAttachmentCategory): string {
+  if (category === 'supporting') return 'Service attachments';
   return (
     INTAKE_UPLOAD_ROWS.find((r) => r.category === category)?.label ?? category
   );

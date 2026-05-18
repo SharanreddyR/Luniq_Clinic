@@ -1,7 +1,9 @@
 import type { UploadCategory } from '@/services/uploadService';
 
+export type VisitAttachmentCategory = UploadCategory | 'supporting';
+
 export type VisitAttachmentMeta = {
-  category: UploadCategory;
+  category: VisitAttachmentCategory;
   files: { name: string; mimeType: string | null }[];
 };
 

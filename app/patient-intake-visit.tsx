@@ -32,7 +32,7 @@ import { clinicScreen, radii, spacing, typography } from '@/constants';
 import { USE_MOCK_CLINIC_SERVICES_WHEN_EMPTY } from '@/constants/config';
 import { colors } from '@/constants/Colors';
 import { MOCK_CLINIC_VISIT_CATALOG } from '@/constants/mockClinicVisitCatalog';
-import { INTAKE_UPLOAD_ROWS } from '@/constants/intakeUploads';
+import { VISIT_ENTIRE_BILL_UPLOAD } from '@/constants/intakeUploads';
 import { DEFAULT_VISIT_SERVICES } from '@/constants/visitServices';
 import { useAppToast } from '@/hooks/useAppToast';
 import { useDoctors } from '@/hooks/useDoctors';
@@ -58,6 +58,7 @@ import {
   usePatientStore,
   useVisitHistoryStore,
 } from '@/store';
+import type { VisitAttachmentCategory } from '@/types/visitHistory';
 
 function isImageLikeAsset(asset: DocumentPickerAsset | null): boolean {
   if (!asset?.uri) return false;
@@ -86,6 +87,94 @@ function isConsultationServiceKey(
     return row ? isConsultationCatalogItem(row) : false;
   }
   return false;
+}
+
+type AttachmentCameraTarget =
+  | { kind: 'bill' }
+  | { kind: 'service'; serviceKey: string };
+
+/** Compact optional file attach on each selected service row (amount + photo/document). */
+function ServiceLineAttachment({
+  assets,
+  onPickDocument,
+  onPickPhoto,
+  onRemoveAt,
+  disabled,
+  showCamera,
+}: {
+  assets: DocumentPickerAsset[];
+  onPickDocument: () => void;
+  onPickPhoto: () => void;
+  onRemoveAt: (index: number) => void;
+  disabled: boolean;
+  showCamera: boolean;
+}) {
+  const count = assets.length;
+  return (
+    <View style={styles.serviceAttachBlock}>
+      <Text variant="bodySmall" style={styles.serviceAttachHint}>
+        Photo or document (optional)
+      </Text>
+      <View style={styles.serviceAttachActions}>
+        <Button
+          mode="outlined"
+          icon="folder-open"
+          onPress={onPickDocument}
+          disabled={disabled}
+          compact
+          style={styles.serviceAttachBtn}
+          contentStyle={clinicScreen.buttonContentCompact}>
+          Choose file
+        </Button>
+        {showCamera ? (
+          <Button
+            mode="outlined"
+            icon="camera"
+            onPress={onPickPhoto}
+            disabled={disabled}
+            compact
+            style={styles.serviceAttachBtn}
+            contentStyle={clinicScreen.buttonContentCompact}>
+            Capture
+          </Button>
+        ) : null}
+      </View>
+      {count > 0 ? (
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator
+          style={styles.serviceAttachThumbStrip}
+          contentContainerStyle={styles.serviceAttachThumbScroll}>
+          {assets.map((asset, index) => (
+            <View key={`${asset.uri}-${index}`} style={styles.serviceAttachThumbWrap}>
+              {isImageLikeAsset(asset) ? (
+                <Image
+                  source={{ uri: asset.uri }}
+                  style={styles.serviceAttachThumbImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.serviceAttachThumbImage, styles.attachThumbDoc]}>
+                  <Text variant="labelSmall" numberOfLines={2} style={styles.attachThumbDocText}>
+                    {asset.name ?? 'File'}
+                  </Text>
+                </View>
+              )}
+              <IconButton
+                icon="close-circle"
+                size={20}
+                iconColor={colors.error}
+                style={styles.serviceAttachThumbRemove}
+                onPress={() => onRemoveAt(index)}
+                accessibilityLabel="Remove file"
+              />
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+    </View>
+  );
 }
 
 function IntakeAttachmentRow({
@@ -281,6 +370,9 @@ export default function PatientIntakeVisitScreen() {
   const [serviceAmounts, setServiceAmounts] = useState<Record<string, string>>(
     {},
   );
+  const [serviceAttachments, setServiceAttachments] = useState<
+    Record<string, DocumentPickerAsset[]>
+  >({});
   const [clinicCatalog, setClinicCatalog] = useState<ClinicVisitCatalogItem[]>(
     [],
   );
@@ -288,18 +380,14 @@ export default function PatientIntakeVisitScreen() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState('');
 
-  const [assets, setAssets] = useState<
-    Record<UploadCategory, DocumentPickerAsset[]>
-  >({
-    prescription: [],
-    report: [],
-    bill: [],
-  });
+  const [entireBillAssets, setEntireBillAssets] = useState<DocumentPickerAsset[]>(
+    [],
+  );
 
-  const [cameraCategory, setCameraCategory] = useState<UploadCategory | null>(
+  const [cameraTarget, setCameraTarget] = useState<AttachmentCameraTarget | null>(
     null,
   );
-  const captureCategoryRef = useRef<UploadCategory | null>(null);
+  const cameraTargetRef = useRef<AttachmentCameraTarget | null>(null);
   const [saving, setSaving] = useState(false);
   const [visitId, setVisitId] = useState<number | null>(null);
   const [visitMeta, setVisitMeta] = useState<StartVisitResponse | null>(null);
@@ -313,8 +401,8 @@ export default function PatientIntakeVisitScreen() {
   } as const;
 
   useEffect(() => {
-    captureCategoryRef.current = cameraCategory;
-  }, [cameraCategory]);
+    cameraTargetRef.current = cameraTarget;
+  }, [cameraTarget]);
 
   const useApiVisit = useMemo(
     () =>
@@ -331,6 +419,7 @@ export default function PatientIntakeVisitScreen() {
   useEffect(() => {
     setSelectedServiceKeys([]);
     setServiceAmounts({});
+    setServiceAttachments({});
   }, [useApiVisit]);
 
   /** Step 1 handoff: visit already started on intake; lock doctor and catalogue. */
@@ -522,46 +611,60 @@ export default function PatientIntakeVisitScreen() {
     setSelectedDoctor(firstAvail);
   }, [department, doctorsInDept, selectedDoctor]);
 
-  const appendAsset = useCallback(
-    (category: UploadCategory, asset: DocumentPickerAsset) => {
+  const appendEntireBillAsset = useCallback(
+    (asset: DocumentPickerAsset) => {
       const hcId = activePatient?.healthCardId;
       const personId = activePatient?.id;
       const apiVisit = !!(hcId && personId);
 
-      setAssets((prev) => ({
-        ...prev,
-        [category]: [...prev[category], asset],
-      }));
+      setEntireBillAssets((prev) => [...prev, asset]);
 
       if (!apiVisit) {
-        upload.mutate({ category, asset });
+        upload.mutate({ category: 'bill', asset });
       }
     },
     [activePatient?.healthCardId, activePatient?.id, upload],
   );
 
-  const removeAssetAt = useCallback(
-    (category: UploadCategory, index: number) => {
-      setAssets((prev) => ({
-        ...prev,
-        [category]: prev[category].filter((_, i) => i !== index),
-      }));
-    },
-    [],
-  );
+  const appendServiceAsset = useCallback((serviceKey: string, asset: DocumentPickerAsset) => {
+    setServiceAttachments((prev) => ({
+      ...prev,
+      [serviceKey]: [...(prev[serviceKey] ?? []), asset],
+    }));
+  }, []);
+
+  const removeEntireBillAt = useCallback((index: number) => {
+    setEntireBillAssets((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const removeServiceAssetAt = useCallback((serviceKey: string, index: number) => {
+    setServiceAttachments((prev) => ({
+      ...prev,
+      [serviceKey]: (prev[serviceKey] ?? []).filter((_, i) => i !== index),
+    }));
+  }, []);
 
   const onCameraCaptured = useCallback(
     (asset: DocumentPickerAsset) => {
-      const cat = captureCategoryRef.current;
-      if (!cat) return;
-      appendAsset(cat, asset);
+      const target = cameraTargetRef.current;
+      if (!target) return;
+      if (target.kind === 'bill') {
+        appendEntireBillAsset(asset);
+      } else {
+        appendServiceAsset(target.serviceKey, asset);
+      }
     },
-    [appendAsset],
+    [appendEntireBillAsset, appendServiceAsset],
   );
 
-  async function onPickDocument(category: UploadCategory) {
+  async function onPickEntireBillDocument() {
     const a = await pickDocument();
-    if (a) appendAsset(category, a);
+    if (a) appendEntireBillAsset(a);
+  }
+
+  async function onPickServiceDocument(serviceKey: string) {
+    const a = await pickDocument();
+    if (a) appendServiceAsset(serviceKey, a);
   }
 
   function toggleServiceKey(key: string, listPrice?: number) {
@@ -569,6 +672,11 @@ export default function PatientIntakeVisitScreen() {
       const exists = prev.includes(key);
       if (exists) {
         setServiceAmounts((curr) => {
+          const copy = { ...curr };
+          delete copy[key];
+          return copy;
+        });
+        setServiceAttachments((curr) => {
           const copy = { ...curr };
           delete copy[key];
           return copy;
@@ -597,6 +705,12 @@ export default function PatientIntakeVisitScreen() {
   }
 
   const showCamera = Platform.OS !== 'web';
+
+  const cameraStagedAssets = useMemo(() => {
+    if (!cameraTarget) return [];
+    if (cameraTarget.kind === 'bill') return entireBillAssets;
+    return serviceAttachments[cameraTarget.serviceKey] ?? [];
+  }, [cameraTarget, entireBillAssets, serviceAttachments]);
 
   const totalAmount = useMemo(() => {
     return selectedServiceKeys.reduce((sum, key) => {
@@ -674,12 +788,14 @@ export default function PatientIntakeVisitScreen() {
       let amountStr = totalAmount.toFixed(2);
 
       if (useApiVisit && visitId) {
-        const stagedUploads = INTAKE_UPLOAD_ROWS.flatMap(({ category }) =>
-          assets[category].map((asset) => ({ category, asset })),
+        const serviceStaged = selectedServiceKeys.flatMap((key) =>
+          (serviceAttachments[key] ?? []).map((asset) => ({ key, asset })),
         );
-        if (stagedUploads.length > 0) {
+        const hasDocs =
+          serviceStaged.length > 0 || entireBillAssets.length > 0;
+        if (hasDocs) {
           setSavingOverlayMessage('Uploading documents…');
-          for (const { category, asset } of stagedUploads) {
+          for (const { asset } of serviceStaged) {
             await uploadClinicVisitDocument(
               visitId,
               {
@@ -687,7 +803,18 @@ export default function PatientIntakeVisitScreen() {
                 name: asset.name ?? 'upload',
                 type: asset.mimeType ?? undefined,
               },
-              mapIntakeCategoryToVisitDocumentType(category),
+              'supporting',
+            );
+          }
+          for (const asset of entireBillAssets) {
+            await uploadClinicVisitDocument(
+              visitId,
+              {
+                uri: asset.uri,
+                name: asset.name ?? 'upload',
+                type: asset.mimeType ?? undefined,
+              },
+              mapIntakeCategoryToVisitDocumentType('bill'),
             );
           }
         }
@@ -744,13 +871,31 @@ export default function PatientIntakeVisitScreen() {
         if (v != null && v !== '') serviceAmountsSnapshot[label] = v;
       }
 
-      const attachments = INTAKE_UPLOAD_ROWS.map(({ category }) => ({
-        category,
-        files: assets[category].map((a) => ({
-          name: a.name ?? 'Attachment',
-          mimeType: a.mimeType ?? null,
-        })),
-      }));
+      const attachments: {
+        category: VisitAttachmentCategory;
+        files: { name: string; mimeType: string | null }[];
+      }[] = [];
+      if (entireBillAssets.length > 0) {
+        attachments.push({
+          category: 'bill',
+          files: entireBillAssets.map((a) => ({
+            name: a.name ?? 'Attachment',
+            mimeType: a.mimeType ?? null,
+          })),
+        });
+      }
+      const serviceFiles = selectedServiceKeys.flatMap(
+        (key) => serviceAttachments[key] ?? [],
+      );
+      if (serviceFiles.length > 0) {
+        attachments.push({
+          category: 'supporting',
+          files: serviceFiles.map((a) => ({
+            name: a.name ?? 'Attachment',
+            mimeType: a.mimeType ?? null,
+          })),
+        });
+      }
 
       useVisitHistoryStore.getState().addVisit({
         id: slipId,
@@ -838,10 +983,10 @@ export default function PatientIntakeVisitScreen() {
             </Text>
             <Text variant="bodyMedium" style={styles.intro}>
               {visitFromHandoff
-                ? 'Doctor is set from Step 1. Choose services and amounts, add visit notes, attach files if needed, then submit the visit.'
+                ? 'Doctor is set from Step 1. Choose services, amounts, and optional files per service; add visit notes and an entire bill below if needed, then submit.'
                 : useApiVisit
-                  ? 'Choose doctor and services, add notes and documents, then submit the visit on the server.'
-                  : 'Choose doctor and services, enter amounts, add notes and optional documents, then save the visit.'}
+                  ? 'Choose doctor and services with optional files per line; add notes and an entire bill below, then submit on the server.'
+                  : 'Choose doctor and services with optional files per line; add notes and an entire bill below, then save the visit.'}
             </Text>
           </View>
 
@@ -995,8 +1140,8 @@ export default function PatientIntakeVisitScreen() {
               </Text>
               <Text variant="bodySmall" style={styles.muted}>
                 {useApiVisit
-                  ? 'Services come from your clinic catalogue. Tap to add or remove; amounts default to list prices where set.'
-                  : 'Tap to add or remove. Enter amount for each selected service.'}
+                  ? 'Services come from your clinic catalogue. Tap to add or remove; set amount and optionally attach a photo or document per service.'
+                  : 'Tap to add or remove. Enter amount and optionally attach a photo or document for each service.'}
               </Text>
               {useApiVisit && catalogLoading ? (
                 <Text variant="bodySmall" style={styles.muted}>
@@ -1093,6 +1238,16 @@ export default function PatientIntakeVisitScreen() {
                             clinic default — the amount above is for reference only.
                           </HelperText>
                         ) : null}
+                        <ServiceLineAttachment
+                          assets={serviceAttachments[key] ?? []}
+                          disabled={attachmentsLocked}
+                          showCamera={showCamera}
+                          onPickDocument={() => void onPickServiceDocument(key)}
+                          onPickPhoto={() =>
+                            setCameraTarget({ kind: 'service', serviceKey: key })
+                          }
+                          onRemoveAt={(index) => removeServiceAssetAt(key, index)}
+                        />
                       </View>
                     );
                   })}
@@ -1135,29 +1290,21 @@ export default function PatientIntakeVisitScreen() {
               </Text>
               <Text variant="bodySmall" style={styles.muted}>
                 {useApiVisit
-                  ? 'Attach files if needed; they are uploaded to your visit when you submit.'
-                  : 'Photos appear below each row; in the camera, use Use photo then Done when finished.'}
+                  ? 'Upload or capture one combined bill for the whole visit. Per-service files are added under each service above.'
+                  : 'One combined bill for the visit. Service-level files are added under each selected service.'}
               </Text>
-              {INTAKE_UPLOAD_ROWS.map(({ category, label, icon }) => (
-                <IntakeAttachmentRow
-                  key={category}
-                  label={label}
-                  icon={icon}
-                  assets={assets[category]}
-                  disabled={attachmentsLocked}
-                  busy={
-                    upload.isPending &&
-                    upload.variables?.category === category
-                  }
-                  showCamera={showCamera}
-                  onPickDocument={() => void onPickDocument(category)}
-                  onPickPhoto={() => setCameraCategory(category)}
-                  onRemoveAt={(index) => removeAssetAt(category, index)}
-                  onClearAll={() =>
-                    setAssets((prev) => ({ ...prev, [category]: [] }))
-                  }
-                />
-              ))}
+              <IntakeAttachmentRow
+                label={VISIT_ENTIRE_BILL_UPLOAD.label}
+                icon={VISIT_ENTIRE_BILL_UPLOAD.icon}
+                assets={entireBillAssets}
+                disabled={attachmentsLocked}
+                busy={upload.isPending && upload.variables?.category === 'bill'}
+                showCamera={showCamera}
+                onPickDocument={() => void onPickEntireBillDocument()}
+                onPickPhoto={() => setCameraTarget({ kind: 'bill' })}
+                onRemoveAt={(index) => removeEntireBillAt(index)}
+                onClearAll={() => setEntireBillAssets([])}
+              />
             </Card.Content>
           </Card>
 
@@ -1187,16 +1334,18 @@ export default function PatientIntakeVisitScreen() {
       />
 
       <ClaimCameraModal
-        visible={cameraCategory != null}
-        onClose={() => setCameraCategory(null)}
+        visible={cameraTarget != null}
+        onClose={() => setCameraTarget(null)}
         onCaptured={onCameraCaptured}
         allowMultiple
-        stagedAssets={
-          cameraCategory != null ? assets[cameraCategory] : []
-        }
+        stagedAssets={cameraStagedAssets}
         onRemoveStaged={(index) => {
-          if (cameraCategory == null) return;
-          removeAssetAt(cameraCategory, index);
+          if (!cameraTarget) return;
+          if (cameraTarget.kind === 'bill') {
+            removeEntireBillAt(index);
+          } else {
+            removeServiceAssetAt(cameraTarget.serviceKey, index);
+          }
         }}
       />
     </SafeAreaView>
@@ -1306,6 +1455,57 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   serviceAmountInput: {
+    backgroundColor: colors.surface,
+  },
+  serviceAttachBlock: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  serviceAttachHint: {
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  serviceAttachActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  serviceAttachBtn: {
+    flexGrow: 1,
+    minWidth: 120,
+  },
+  serviceAttachThumbStrip: {
+    height: 72,
+    marginTop: spacing.sm,
+    width: '100%',
+  },
+  serviceAttachThumbScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: spacing.sm,
+  },
+  serviceAttachThumbWrap: {
+    width: 64,
+    height: 64,
+    marginRight: spacing.sm,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  serviceAttachThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  serviceAttachThumbRemove: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    margin: 0,
     backgroundColor: colors.surface,
   },
   totalRow: {
