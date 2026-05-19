@@ -11,6 +11,8 @@
     "build:android:aab": "eas build --platform android --profile production",
     "build:android:apk": "eas build --platform android --profile production-apk",
     "build:android:apk-internal": "eas build --platform android --profile apk",
+    "build:ios:ipa": "eas build --platform ios --profile ipa",
+    "build:ios:ipa-internal": "eas build --platform ios --profile preview",
     "build:ios:store": "eas build --platform ios --profile production",
     "submit:stores": "eas submit --profile production --latest"
   },

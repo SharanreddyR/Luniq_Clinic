@@ -1,7 +1,8 @@
 {
   "cli": {
     "version": ">= 18.8.1",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "requireCommit": true
   },
   "build": {
     "development": {
@@ -9,12 +10,21 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
-    },
-    "apk": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "ipa": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
       },
       "autoIncrement": true
     },
@@ -23,6 +33,9 @@
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "simulator": false
       }
     },
     "production-apk": {
