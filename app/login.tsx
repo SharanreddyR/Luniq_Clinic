@@ -1,11 +1,14 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, HelperText, TextInput } from 'react-native-paper';
+import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 
-import { AuthScaffold } from '@/components/auth/AuthScaffold';
+import {
+  AuthScaffold,
+  authInputOutline,
+} from '@/components/auth/AuthScaffold';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { clinicScreen, spacing } from '@/constants';
+import { clinicScreen, radii, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
 import {
@@ -37,7 +40,6 @@ export default function LoginScreen() {
     requestAnimationFrame(scroll);
     setTimeout(scroll, 100);
     setTimeout(scroll, 280);
-    setTimeout(scroll, 520);
   }, []);
 
   useEffect(() => {
@@ -100,104 +102,148 @@ export default function LoginScreen() {
 
   return (
     <>
-    <AuthScaffold
-      ref={authScrollRef}
-      cardTitle="Login"
-      cardSubtitle="Sign in to continue to your clinic dashboard."
-      footer={null}>
-      <TextInput
-        mode="flat"
-        label="Phone or email"
-        value={phoneOrEmail}
-        onChangeText={setPhoneOrEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="username"
-        textContentType="username"
-        style={styles.input}
-        underlineColor={colors.border}
-        activeUnderlineColor={colors.primary}
-        left={<TextInput.Icon icon="account-outline" color={colors.textMuted} />}
-        error={!!identifierError}
-        disabled={login.isPending}
-      />
-      <HelperText type="error" visible={!!identifierError}>
-        {identifierError}
-      </HelperText>
-
-      <View
-        collapsable={false}
-        onLayout={(e) => {
-          passwordBlockY.current = e.nativeEvent.layout.y;
-        }}>
+      <AuthScaffold
+        ref={authScrollRef}
+        cardKicker="Welcome back"
+        cardTitle="Sign in"
+        cardSubtitle="Use your clinic partner credentials to open the dashboard, record visits, and manage claims.">
         <TextInput
-          mode="flat"
-          label="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={secure}
-          autoComplete="password"
-          textContentType="password"
-          style={styles.inputSpaced}
-          underlineColor={colors.border}
-          activeUnderlineColor={colors.primary}
-          left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
-          disabled={login.isPending}
-          onFocus={scrollPasswordIntoView}
-          right={
-            <TextInput.Icon
-              icon={secure ? 'eye-off' : 'eye'}
-              disabled={login.isPending}
-              onPress={() => {
-                if (!login.isPending) setSecure((s) => !s);
-              }}
-            />
+          mode="outlined"
+          label="Phone or email"
+          value={phoneOrEmail}
+          onChangeText={setPhoneOrEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="username"
+          textContentType="username"
+          style={styles.input}
+          {...authInputOutline}
+          left={
+            <TextInput.Icon icon="account-outline" color={colors.textMuted} />
           }
+          error={!!identifierError}
+          disabled={login.isPending}
         />
-      </View>
+        <HelperText type="error" visible={!!identifierError}>
+          {identifierError}
+        </HelperText>
 
-      <Button
-        mode="contained"
-        onPress={onSubmit}
-        loading={login.isPending}
-        disabled={!canSubmit}
-        buttonColor={colors.secondary}
-        textColor={colors.onPrimary}
-        style={[clinicScreen.button, styles.primaryBtn]}
-        contentStyle={clinicScreen.buttonContent}>
-        Sign in
-      </Button>
+        <View
+          collapsable={false}
+          onLayout={(e) => {
+            passwordBlockY.current = e.nativeEvent.layout.y;
+          }}>
+          <TextInput
+            mode="outlined"
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={secure}
+            autoComplete="password"
+            textContentType="password"
+            style={styles.inputSpaced}
+            {...authInputOutline}
+            left={<TextInput.Icon icon="lock-outline" color={colors.textMuted} />}
+            disabled={login.isPending}
+            onFocus={scrollPasswordIntoView}
+            right={
+              <TextInput.Icon
+                icon={secure ? 'eye-off' : 'eye'}
+                disabled={login.isPending}
+                onPress={() => {
+                  if (!login.isPending) setSecure((s) => !s);
+                }}
+              />
+            }
+          />
+        </View>
 
-      <Button
-        mode="contained"
-        disabled={login.isPending}
-        buttonColor={colors.primary}
-        textColor={colors.onPrimary}
-        style={[clinicScreen.button, styles.secondaryBtn]}
-        contentStyle={clinicScreen.buttonContent}
-        onPress={() => router.push('/register')}>
-        Request for Registration
-      </Button>
-    </AuthScaffold>
-    <LoadingOverlay visible={login.isPending} message="Signing you in…" />
+        <Button
+          mode="contained"
+          onPress={onSubmit}
+          loading={login.isPending}
+          disabled={!canSubmit}
+          buttonColor={colors.secondary}
+          textColor={colors.onPrimary}
+          style={[clinicScreen.button, styles.primaryBtn]}
+          contentStyle={styles.primaryBtnContent}
+          labelStyle={styles.primaryBtnLabel}>
+          Sign in to dashboard
+        </Button>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text variant="labelSmall" style={styles.dividerText}>
+            New clinic partner?
+          </Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <Button
+          mode="outlined"
+          disabled={login.isPending}
+          textColor={colors.secondary}
+          style={[clinicScreen.button, styles.secondaryBtn]}
+          contentStyle={clinicScreen.buttonContent}
+          onPress={() => router.push('/register')}>
+          Apply for registration
+        </Button>
+        <Text variant="bodySmall" style={styles.registerHint}>
+          Submit your clinic details for review. We usually respond within 2–3
+          business days.
+        </Text>
+      </AuthScaffold>
+      <LoadingOverlay visible={login.isPending} message="Signing you in…" />
     </>
   );
 }
 
 const styles = StyleSheet.create({
   input: {
-    backgroundColor: 'transparent',
-    marginBottom: 0,
+    backgroundColor: colors.surface,
   },
   inputSpaced: {
-    backgroundColor: 'transparent',
     marginTop: spacing.md,
-    marginBottom: spacing.lg,
+    backgroundColor: colors.surface,
   },
   primaryBtn: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
+    borderRadius: radii.button,
+  },
+  primaryBtnContent: {
+    minHeight: 52,
+  },
+  primaryBtnLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    color: colors.textMuted,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   secondaryBtn: {
-    marginTop: spacing.xl + spacing.sm,
+    borderColor: colors.secondary,
+    borderWidth: 1.5,
+  },
+  registerHint: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+    paddingHorizontal: spacing.sm,
   },
 });

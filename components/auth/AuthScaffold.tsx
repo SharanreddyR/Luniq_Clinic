@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { forwardRef, useEffect, useState, type ReactNode } from 'react';
@@ -12,31 +13,32 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { BrandLogoMark } from '@/components/ClinicLogo';
-import { APP_NAME, radii, spacing, typography } from '@/constants';
+import { radii, shadows, spacing, typography } from '@/constants';
 import { colors } from '@/constants/Colors';
 
-/** Teal clinical gradient — shared with auth screens and hydration splash. */
-export const AUTH_GRADIENT = ['#0B6B6D', '#1A9B98', '#40B9AE'] as const;
+/** Matches dashboard / profile hero */
+export const AUTH_GRADIENT = ['#0A5257', '#146D70', '#22B8AE'] as const;
 
-const CARD_TOP_RADIUS = 26;
+const CARD_TOP_RADIUS = 28;
+
+export const authInputOutline = {
+  outlineColor: colors.border,
+  activeOutlineColor: colors.primary,
+  outlineStyle: { borderRadius: radii.sm } as const,
+};
 
 export type AuthScaffoldProps = {
   cardTitle: string;
   cardSubtitle: string;
   children: ReactNode;
-  /** Row on blue band below white card (e.g. sign up / sign in link). */
-  footer: ReactNode;
-  /** Optional back control above logo (register from login stack). */
+  footer?: ReactNode;
   headerAccessory?: ReactNode;
+  /** Short label above title, e.g. "CLINIC PORTAL" */
+  cardKicker?: string;
 };
 
-/**
- * Shared layout: gradient hero, brand row, large white card (rounded top), bottom link strip.
- * Forward `ref` to the inner `ScrollView` so screens can scroll focused fields into view.
- */
 export const AuthScaffold = forwardRef<ScrollView, AuthScaffoldProps>(
   function AuthScaffold(
     {
@@ -45,102 +47,117 @@ export const AuthScaffold = forwardRef<ScrollView, AuthScaffoldProps>(
       children,
       footer,
       headerAccessory,
+      cardKicker = 'CLINIC PORTAL',
     },
     ref,
   ) {
-  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
+    const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
 
-  useEffect(() => {
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    useEffect(() => {
+      const showEvent =
+        Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+      const hideEvent =
+        Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const onShow = (e: { endCoordinates: { height: number } }) => {
-      setKeyboardBottomInset(e.endCoordinates.height);
-    };
-    const onHide = () => setKeyboardBottomInset(0);
+      const onShow = (e: { endCoordinates: { height: number } }) => {
+        setKeyboardBottomInset(e.endCoordinates.height);
+      };
+      const onHide = () => setKeyboardBottomInset(0);
 
-    const subShow = Keyboard.addListener(showEvent, onShow);
-    const subHide = Keyboard.addListener(hideEvent, onHide);
-    return () => {
-      subShow.remove();
-      subHide.remove();
-    };
-  }, []);
+      const subShow = Keyboard.addListener(showEvent, onShow);
+      const subHide = Keyboard.addListener(hideEvent, onHide);
+      return () => {
+        subShow.remove();
+        subHide.remove();
+      };
+    }, []);
 
-  return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <LinearGradient
-        colors={[...AUTH_GRADIENT]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}>
-          <View style={styles.column}>
-            {headerAccessory ? (
-              <View style={styles.accessory}>{headerAccessory}</View>
-            ) : null}
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={[...AUTH_GRADIENT]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.orbTop} pointerEvents="none" />
+        <View style={styles.orbBottom} pointerEvents="none" />
 
-            <View style={styles.brandRow}>
-              <BrandLogoMark size={64} padded={false} />
-              <Text style={styles.welcomeHeading}>Welcome</Text>
-              <Text style={styles.welcomeSubline}>{APP_NAME}</Text>
-            </View>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.flex}>
+            <View style={styles.column}>
+              {headerAccessory ? (
+                <View style={styles.accessory}>{headerAccessory}</View>
+              ) : null}
 
-            <View style={styles.cardShell}>
-              <ScrollView
-                ref={ref}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={[
-                  styles.cardScroll,
-                  {
-                    paddingBottom:
-                      spacing.xl +
-                      keyboardBottomInset +
-                      (Platform.OS === 'android' ? spacing.lg : spacing.md),
-                  },
-                ]}>
-                <Text style={styles.cardTitle}>{cardTitle}</Text>
-                <Text style={styles.cardSubtitle}>{cardSubtitle}</Text>
-                {children}
-                <View style={styles.cardFooterBrand}>
-                  <MaterialCommunityIcons
-                    name="medical-bag"
-                    size={14}
-                    color={colors.textMuted}
-                  />
-                  <Text style={styles.cardFooterText}>{APP_NAME}</Text>
+              <View style={styles.brandRow}>
+                <View style={styles.logoFrame}>
+                  <BrandLogoMark size={56} padded={false} />
                 </View>
-              </ScrollView>
+                <Text style={styles.welcomeHeading}>Luniq Clinic</Text>
+              </View>
+
+              <View style={styles.cardShell}>
+                <View style={styles.cardAccent} />
+                <ScrollView
+                  ref={ref}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[
+                    styles.cardScroll,
+                    {
+                      paddingBottom:
+                        spacing.xl +
+                        keyboardBottomInset +
+                        (Platform.OS === 'android' ? spacing.lg : spacing.md),
+                    },
+                  ]}>
+                  <Text style={styles.cardKicker}>{cardKicker}</Text>
+                  <Text style={styles.cardTitle}>{cardTitle}</Text>
+                  <Text style={styles.cardSubtitle}>{cardSubtitle}</Text>
+                  {children}
+                  <View style={styles.trustRow}>
+                    <MaterialCommunityIcons
+                      name="shield-check-outline"
+                      size={16}
+                      color={colors.success}
+                    />
+                    <Text style={styles.trustText}>
+                      Secure sign-in for verified clinic partners
+                    </Text>
+                  </View>
+                </ScrollView>
+              </View>
+
+              {footer ? <View style={styles.footerStrip}>{footer}</View> : null}
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
-  );
-});
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
+    );
+  },
+);
 
-export function AuthWordmark() {
-  const words = APP_NAME.trim().split(/\s+/);
-  const first = words[0] ?? APP_NAME;
-  const rest = words.slice(1).join(' ');
-
+export function AuthSectionTitle({
+  title,
+  icon,
+}: {
+  title: string;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+}) {
   return (
-    <View style={styles.wordmark}>
-      <Text style={styles.wordFirst}>{first}</Text>
-      {rest ? (
-        <Text style={styles.wordRest}>
-          {' '}
-          {rest}
-        </Text>
+    <View style={styles.sectionTitleRow}>
+      {icon ? (
+        <MaterialCommunityIcons
+          name={icon}
+          size={18}
+          color={colors.primary}
+        />
       ) : null}
+      <Text style={styles.sectionTitle}>{title}</Text>
     </View>
   );
 }
@@ -161,8 +178,8 @@ export function AuthBackLink({
       accessibilityLabel={label}>
       <MaterialCommunityIcons
         name="chevron-left"
-        size={22}
-        color="rgba(255,255,255,0.92)"
+        size={24}
+        color="rgba(255,255,255,0.95)"
       />
       <Text style={styles.backText}>{label}</Text>
     </Pressable>
@@ -172,7 +189,25 @@ export function AuthBackLink({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0B6B6D',
+    backgroundColor: colors.secondary,
+  },
+  orbTop: {
+    position: 'absolute',
+    top: -80,
+    right: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(34, 184, 174, 0.18)',
+  },
+  orbBottom: {
+    position: 'absolute',
+    bottom: 120,
+    left: -90,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(196, 245, 66, 0.1)',
   },
   safe: { flex: 1 },
   flex: { flex: 1 },
@@ -181,47 +216,33 @@ const styles = StyleSheet.create({
   },
   accessory: {
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
   },
   brandRow: {
     alignItems: 'center',
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
-  welcomeHeading: {
-    marginTop: spacing.lg,
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
-    textAlign: 'center',
-  },
-  welcomeSubline: {
-    marginTop: spacing.xs,
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.88)',
-    textAlign: 'center',
-    letterSpacing: 0.2,
-  },
-  wordmark: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  logoFrame: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.md,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  welcomeHeading: {
     marginTop: spacing.md,
-  },
-  wordFirst: {
-    fontSize: 26,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
-    letterSpacing: 0.3,
-  },
-  wordRest: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    color: colors.onPrimary,
+    letterSpacing: -0.3,
+    textAlign: 'center',
   },
   cardShell: {
     flex: 1,
@@ -229,23 +250,32 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: CARD_TOP_RADIUS,
     borderTopRightRadius: CARD_TOP_RADIUS,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 4,
+    ...shadows.lg,
     borderTopWidth: 1,
-    borderColor: '#D6EAE8',
+    borderColor: colors.border,
+  },
+  cardAccent: {
+    height: 4,
+    backgroundColor: colors.primary,
+    width: '100%',
   },
   cardScroll: {
     paddingHorizontal: spacing.lg + 4,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  cardKicker: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
   cardTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: colors.secondary,
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
   },
   cardSubtitle: {
     ...typography.subtitle,
@@ -253,20 +283,41 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
     fontSize: 15,
+    lineHeight: 22,
   },
-  cardFooterBrand: {
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.secondary,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  trustRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     marginTop: spacing.xl,
-    opacity: 0.75,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  cardFooterText: {
-    fontSize: 13,
+  trustText: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textMuted,
-    letterSpacing: 0.4,
+  },
+  footerStrip: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
   },
   backRow: {
     flexDirection: 'row',
@@ -277,7 +328,7 @@ const styles = StyleSheet.create({
   backPressed: { opacity: 0.75 },
   backText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: '700',
+    color: colors.onPrimary,
   },
 });

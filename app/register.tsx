@@ -1,12 +1,9 @@
 import * as DocumentPicker from 'expo-document-picker';
 import type { DocumentPickerAsset } from 'expo-document-picker';
 import { Link, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,11 +16,15 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
+import {
+  AuthBackLink,
+  AuthScaffold,
+  AuthSectionTitle,
+  authInputOutline,
+} from '@/components/auth/AuthScaffold';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { clinicScreen, spacing } from '@/constants';
+import { clinicScreen, radii, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useClinicApplicationMutation } from '@/hooks/useClinicApplicationMutation';
 import {
@@ -42,6 +43,7 @@ const LICENSE_PICK_TYPES = [
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [clinicName, setClinicName] = useState('');
   const [ownerName, setOwnerName] = useState('');
@@ -197,295 +199,260 @@ export default function RegisterScreen() {
     );
   }
 
-  const inputOutline = {
-    outlineColor: colors.border,
-    activeOutlineColor: colors.primary,
-  } as const;
-
   return (
     <>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}>
-            <CompactScreenHeader title="Registration" onBackPress={goBack} />
+      <AuthScaffold
+        ref={scrollRef}
+        cardKicker="Partner onboarding"
+        cardTitle="Register your clinic"
+        cardSubtitle="Tell us about your clinic. Our team will verify your details and enable your partner account."
+        headerAccessory={
+          <AuthBackLink label="Back to sign in" onPress={goBack} />
+        }
+        footer={
+          <View style={styles.footerLogin}>
+            <Text variant="bodyMedium" style={styles.footerMuted}>
+              Already have an account?{' '}
+            </Text>
+            <Link href="/login" asChild>
+              <Pressable hitSlop={10} disabled={apply.isPending}>
+                <Text style={styles.footerLink}>Sign in</Text>
+              </Pressable>
+            </Link>
+          </View>
+        }>
+        <AuthSectionTitle title="Clinic details" icon="hospital-building" />
 
-            <View style={styles.card}>
-              <Text variant="bodyMedium" style={styles.lead}>
-                Complete the form below. We usually respond within 2–3 business
-                days.
-              </Text>
+        <TextInput
+          mode="outlined"
+          label="Clinic name *"
+          value={clinicName}
+          onChangeText={setClinicName}
+          style={styles.input}
+          {...authInputOutline}
+          left={
+            <TextInput.Icon icon="hospital-building" color={colors.textMuted} />
+          }
+          error={!!clinicNameError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!clinicNameError}>
+          {clinicNameError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="Clinic name *"
-                value={clinicName}
-                onChangeText={setClinicName}
-                style={styles.input}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon
-                    icon="hospital-building"
-                    color={colors.textMuted}
-                  />
-                }
-                error={!!clinicNameError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!clinicNameError}>
-                {clinicNameError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="Owner / contact name *"
+          value={ownerName}
+          onChangeText={setOwnerName}
+          style={styles.inputSpaced}
+          {...authInputOutline}
+          left={<TextInput.Icon icon="account-outline" color={colors.textMuted} />}
+          error={!!ownerNameError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!ownerNameError}>
+          {ownerNameError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="Owner / contact name *"
-                value={ownerName}
-                onChangeText={setOwnerName}
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon icon="account-outline" color={colors.textMuted} />
-                }
-                error={!!ownerNameError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!ownerNameError}>
-                {ownerNameError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="Phone *"
+          value={phone}
+          onChangeText={(t) =>
+            setPhone(normalizeClinicRegistrationPhone(t))
+          }
+          keyboardType="phone-pad"
+          autoComplete="tel"
+          style={styles.inputSpaced}
+          {...authInputOutline}
+          left={<TextInput.Icon icon="phone-outline" color={colors.textMuted} />}
+          placeholder="10-digit mobile"
+          error={!!phoneError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!phoneError}>
+          {phoneError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="Phone *"
-                value={phone}
-                onChangeText={(t) =>
-                  setPhone(normalizeClinicRegistrationPhone(t))
-                }
-                keyboardType="phone-pad"
-                autoComplete="tel"
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon icon="phone-outline" color={colors.textMuted} />
-                }
-                placeholder="10-digit mobile"
-                error={!!phoneError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!phoneError}>
-                {phoneError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="Email (optional)"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          style={styles.inputSpaced}
+          {...authInputOutline}
+          left={<TextInput.Icon icon="email-outline" color={colors.textMuted} />}
+          error={!!emailError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!emailError}>
+          {emailError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="Email (optional)"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon icon="email-outline" color={colors.textMuted} />
-                }
-                error={!!emailError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!emailError}>
-                {emailError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="License number *"
+          value={licenseNumber}
+          onChangeText={setLicenseNumber}
+          style={styles.inputSpaced}
+          {...authInputOutline}
+          left={
+            <TextInput.Icon icon="certificate-outline" color={colors.textMuted} />
+          }
+          error={!!licenseNoError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!licenseNoError}>
+          {licenseNoError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="License number *"
-                value={licenseNumber}
-                onChangeText={setLicenseNumber}
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon
-                    icon="certificate-outline"
-                    color={colors.textMuted}
-                  />
-                }
-                error={!!licenseNoError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!licenseNoError}>
-                {licenseNoError}
-              </HelperText>
+        <AuthSectionTitle title="Location" icon="map-marker-outline" />
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="Address *"
-                value={address}
-                onChangeText={setAddress}
-                multiline
-                numberOfLines={3}
-                style={[styles.inputSpaced, styles.addressInput]}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon
-                    icon="map-marker-outline"
-                    color={colors.textMuted}
-                  />
-                }
-                placeholder="Street, area, landmark"
-                error={!!addressError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!addressError}>
-                {addressError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="Address *"
+          value={address}
+          onChangeText={setAddress}
+          multiline
+          numberOfLines={3}
+          style={[styles.inputSpaced, styles.addressInput]}
+          {...authInputOutline}
+          left={
+            <TextInput.Icon icon="map-marker-outline" color={colors.textMuted} />
+          }
+          placeholder="Street, area, landmark"
+          error={!!addressError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!addressError}>
+          {addressError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="City *"
-                value={city}
-                onChangeText={setCity}
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={
-                  <TextInput.Icon
-                    icon="city-variant-outline"
-                    color={colors.textMuted}
-                  />
-                }
-                error={!!cityError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!cityError}>
-                {cityError}
-              </HelperText>
+        <View style={styles.rowInputs}>
+          <View style={styles.rowHalf}>
+            <TextInput
+              mode="outlined"
+              label="City *"
+              value={city}
+              onChangeText={setCity}
+              style={styles.input}
+              {...authInputOutline}
+              error={!!cityError}
+              disabled={apply.isPending}
+            />
+            <HelperText type="error" visible={!!cityError}>
+              {cityError}
+            </HelperText>
+          </View>
+          <View style={styles.rowHalf}>
+            <TextInput
+              mode="outlined"
+              label="State *"
+              value={state}
+              onChangeText={setState}
+              style={styles.input}
+              {...authInputOutline}
+              error={!!stateError}
+              disabled={apply.isPending}
+            />
+            <HelperText type="error" visible={!!stateError}>
+              {stateError}
+            </HelperText>
+          </View>
+        </View>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="State *"
-                value={state}
-                onChangeText={setState}
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={<TextInput.Icon icon="map-outline" color={colors.textMuted} />}
-                error={!!stateError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!stateError}>
-                {stateError}
-              </HelperText>
+        <TextInput
+          mode="outlined"
+          label="PIN code *"
+          value={pincode}
+          onChangeText={setPincode}
+          keyboardType="number-pad"
+          maxLength={6}
+          style={styles.inputSpaced}
+          {...authInputOutline}
+          left={<TextInput.Icon icon="numeric" color={colors.textMuted} />}
+          error={!!pincodeError}
+          disabled={apply.isPending}
+        />
+        <HelperText type="error" visible={!!pincodeError}>
+          {pincodeError}
+        </HelperText>
 
-              <TextInput
-                mode="outlined"
-                dense
-                label="PIN code *"
-                value={pincode}
-                onChangeText={setPincode}
-                keyboardType="number-pad"
-                maxLength={6}
-                style={styles.inputSpaced}
-                {...inputOutline}
-                left={<TextInput.Icon icon="numeric" color={colors.textMuted} />}
-                error={!!pincodeError}
-                disabled={apply.isPending}
-              />
-              <HelperText type="error" visible={!!pincodeError}>
-                {pincodeError}
-              </HelperText>
+        <AuthSectionTitle title="Documents" icon="file-document-outline" />
 
-              <Text variant="titleSmall" style={styles.docSectionLabel}>
-                License document (optional)
-              </Text>
-              <Text variant="bodySmall" style={styles.docHint}>
-                PDF, JPG, or PNG — max 5 MB. Uploaded before your application is
-                sent.
-              </Text>
-              <View style={styles.docRow}>
-                <Button
-                  mode="outlined"
-                  onPress={pickLicense}
-                  disabled={apply.isPending}
-                  style={styles.docPickBtn}
-                  textColor={colors.primary}>
-                  {licenseAsset ? 'Change file' : 'Attach file'}
-                </Button>
-                {licenseAsset ? (
-                  <Button
-                    mode="text"
-                    onPress={clearLicense}
-                    disabled={apply.isPending}
-                    textColor={colors.textMuted}>
-                    Remove
-                  </Button>
-                ) : null}
-              </View>
-              {licenseAsset ? (
-                <Text variant="bodySmall" style={styles.fileName} numberOfLines={2}>
-                  {licenseAsset.name}
-                </Text>
-              ) : null}
-
-              <View style={styles.termsRow}>
-                <Checkbox.Android
-                  status={termsAccepted ? 'checked' : 'unchecked'}
-                  onPress={() => setTermsAccepted((v) => !v)}
-                  color={colors.primary}
-                  disabled={apply.isPending}
-                />
-                <Pressable
-                  onPress={() => setTermsAccepted((v) => !v)}
-                  style={styles.termsPress}
-                  disabled={apply.isPending}>
-                  <Text variant="bodyMedium" style={styles.termsText}>
-                    I confirm the information is accurate and I agree to the{' '}
-                    <Text style={styles.termsBold}>Terms &amp; conditions</Text>
-                  </Text>
-                </Pressable>
-              </View>
-
-              {submitError ? (
-                <HelperText type="error" visible style={styles.submitError}>
-                  {submitError}
-                </HelperText>
-              ) : null}
-
+        <View style={styles.docCard}>
+          <Text variant="bodySmall" style={styles.docHint}>
+            Attach your clinic license (optional). PDF, JPG, or PNG — max 5 MB.
+          </Text>
+          <View style={styles.docRow}>
+            <Button
+              mode="contained-tonal"
+              icon="paperclip"
+              onPress={pickLicense}
+              disabled={apply.isPending}
+              buttonColor={colors.surfaceVariant}
+              textColor={colors.secondary}
+              style={styles.docPickBtn}>
+              {licenseAsset ? 'Change file' : 'Attach license'}
+            </Button>
+            {licenseAsset ? (
               <Button
-                mode="contained"
-                onPress={onSubmit}
-                loading={apply.isPending}
-                disabled={!canSubmit}
-                buttonColor={colors.secondary}
-                textColor={colors.onPrimary}
-                style={[clinicScreen.button, styles.submitBtn]}
-                contentStyle={clinicScreen.buttonContent}>
-                Submit application
+                mode="text"
+                onPress={clearLicense}
+                disabled={apply.isPending}
+                textColor={colors.textMuted}>
+                Remove
               </Button>
+            ) : null}
+          </View>
+          {licenseAsset ? (
+            <Text variant="bodySmall" style={styles.fileName} numberOfLines={2}>
+              {licenseAsset.name}
+            </Text>
+          ) : null}
+        </View>
 
-              <View style={styles.footerLogin}>
-                <Text variant="bodyMedium" style={styles.footerMuted}>
-                  Already have an account?{' '}
-                </Text>
-                <Link href="/login" asChild>
-                  <Pressable hitSlop={10} disabled={apply.isPending}>
-                    <Text style={styles.footerLink}>Login</Text>
-                  </Pressable>
-                </Link>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+        <View style={styles.termsRow}>
+          <Checkbox.Android
+            status={termsAccepted ? 'checked' : 'unchecked'}
+            onPress={() => setTermsAccepted((v) => !v)}
+            color={colors.primary}
+            disabled={apply.isPending}
+          />
+          <Pressable
+            onPress={() => setTermsAccepted((v) => !v)}
+            style={styles.termsPress}
+            disabled={apply.isPending}>
+            <Text variant="bodyMedium" style={styles.termsText}>
+              I confirm the information is accurate and I agree to the{' '}
+              <Text style={styles.termsBold}>Terms &amp; conditions</Text>
+            </Text>
+          </Pressable>
+        </View>
+
+        {submitError ? (
+          <HelperText type="error" visible style={styles.submitError}>
+            {submitError}
+          </HelperText>
+        ) : null}
+
+        <Button
+          mode="contained"
+          onPress={onSubmit}
+          loading={apply.isPending}
+          disabled={!canSubmit}
+          buttonColor={colors.secondary}
+          textColor={colors.onPrimary}
+          style={[clinicScreen.button, styles.submitBtn]}
+          contentStyle={styles.submitBtnContent}
+          labelStyle={styles.submitBtnLabel}>
+          Submit application
+        </Button>
+      </AuthScaffold>
       <LoadingOverlay
         visible={apply.isPending}
         message={
@@ -499,28 +466,6 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: { flex: 1 },
-  scrollContent: {
-    paddingBottom: spacing.xl,
-  },
-  card: {
-    marginTop: spacing.md,
-    marginHorizontal: spacing.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  lead: {
-    color: colors.textMuted,
-    marginBottom: spacing.lg,
-    lineHeight: 22,
-  },
   input: {
     backgroundColor: colors.surface,
   },
@@ -529,18 +474,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   addressInput: {
-    minHeight: 100,
+    minHeight: 96,
     textAlignVertical: 'top',
   },
-  docSectionLabel: {
-    fontWeight: '700',
-    color: colors.secondary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xs,
+  rowInputs: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  rowHalf: {
+    flex: 1,
+  },
+  docCard: {
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
   docHint: {
     color: colors.textMuted,
     marginBottom: spacing.sm,
+    lineHeight: 18,
   },
   docRow: {
     flexDirection: 'row',
@@ -550,10 +505,12 @@ const styles = StyleSheet.create({
   },
   docPickBtn: {
     alignSelf: 'flex-start',
+    borderRadius: radii.button,
   },
   fileName: {
-    color: colors.textMuted,
-    marginTop: spacing.xs,
+    color: colors.secondary,
+    marginTop: spacing.sm,
+    fontWeight: '600',
   },
   termsRow: {
     flexDirection: 'row',
@@ -580,20 +537,27 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     marginTop: spacing.sm,
+    borderRadius: radii.button,
+  },
+  submitBtnContent: {
+    minHeight: 52,
+  },
+  submitBtnLabel: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   footerLogin: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.xl,
-    paddingBottom: spacing.sm,
   },
   footerMuted: {
-    color: colors.textMuted,
+    color: 'rgba(255,255,255,0.82)',
+    fontWeight: '500',
   },
   footerLink: {
-    color: colors.primary,
+    color: colors.accent,
     fontWeight: '800',
     fontSize: 15,
   },

@@ -13,8 +13,12 @@ import { useAuthStore } from '@/store';
 
 export const NOTIFICATIONS_QUERY_KEY = ['notifications', 'infinite'] as const;
 
-export function useNotificationsInfinite(perPage = 20) {
+export function useNotificationsInfinite(
+  perPage = 20,
+  options?: { enabled?: boolean },
+) {
   const token = useAuthStore((s) => s.token);
+  const enabled = (options?.enabled ?? true) && Boolean(token);
 
   return useInfiniteQuery({
     queryKey: [...NOTIFICATIONS_QUERY_KEY, perPage],
@@ -23,8 +27,8 @@ export function useNotificationsInfinite(perPage = 20) {
     initialPageParam: 1,
     getNextPageParam: (last) =>
       last.meta.has_more ? last.meta.current_page + 1 : undefined,
-    enabled: Boolean(token),
-    staleTime: 30_000,
+    enabled,
+    staleTime: 120_000,
   });
 }
 
