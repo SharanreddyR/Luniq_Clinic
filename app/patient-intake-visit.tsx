@@ -26,6 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ClaimCameraModal } from '@/components/ClaimCameraModal';
+import { MemberVisitHistorySheet } from '@/components/patient/MemberVisitHistorySheet';
 import { CompactScreenHeader } from '@/components/ui/CompactScreenHeader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, radii, spacing, typography } from '@/constants';
@@ -394,6 +395,7 @@ export default function PatientIntakeVisitScreen() {
   const [visitStartError, setVisitStartError] = useState<string | null>(null);
   const [startingVisit, setStartingVisit] = useState(false);
   const [savingOverlayMessage, setSavingOverlayMessage] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const inputFocusProps = {
     outlineColor: colors.border,
     activeOutlineColor: colors.primary,
@@ -960,6 +962,11 @@ export default function PatientIntakeVisitScreen() {
     return <Redirect href="/patient-intake" />;
   }
 
+  const memberPersonId =
+    activePatient.id != null && Number.isFinite(Number(activePatient.id))
+      ? Number(activePatient.id)
+      : null;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <CompactScreenHeader
@@ -1003,8 +1010,30 @@ export default function PatientIntakeVisitScreen() {
                   {activePatient.mobile ? ` · ${activePatient.mobile}` : ''}
                 </Text>
               </View>
+              {memberPersonId != null ? (
+                <Button
+                  mode="outlined"
+                  compact
+                  icon="history"
+                  onPress={() => setHistoryOpen(true)}
+                  disabled={saving || startingVisit}
+                  style={styles.historyBtn}
+                  labelStyle={styles.historyBtnLabel}
+                  contentStyle={styles.historyBtnContent}>
+                  History
+                </Button>
+              ) : null}
             </Card.Content>
           </Card>
+
+          {memberPersonId != null ? (
+            <MemberVisitHistorySheet
+              visible={historyOpen}
+              onDismiss={() => setHistoryOpen(false)}
+              personId={memberPersonId}
+              patientName={activePatient.name}
+            />
+          ) : null}
 
           <Card style={[clinicScreen.card, styles.card, styles.sectionCard]} mode="elevated">
             <Card.Content>
@@ -1399,6 +1428,20 @@ const styles = StyleSheet.create({
     borderColor: colors.surfaceVariant,
   },
   patientText: { flex: 1, minWidth: 0 },
+  historyBtn: {
+    borderColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 0,
+  },
+  historyBtnLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginVertical: 0,
+  },
+  historyBtnContent: {
+    height: 36,
+    paddingHorizontal: 4,
+  },
   muted: { color: colors.textMuted, marginTop: 4 },
   visitSyncRow: {
     flexDirection: 'row',

@@ -161,6 +161,178 @@ export type MemberVisitHistoryMeta = {
   has_more: boolean;
 };
 
+export type MemberVisitHistoryService = {
+  id: number;
+  service_name: string;
+  amount: string;
+  is_consultation: boolean;
+};
+
+export type MemberVisitHistoryClaim = {
+  id: number;
+  claim_number: string;
+  status: string;
+  approved_amount: string | null;
+};
+
+export type MemberVisitHistoryDocument = {
+  id: number;
+  file_name: string;
+  url: string;
+  document_type: string | null;
+  uploaded_at: string | null;
+};
+
+export type MemberVisitHistoryItem = {
+  id: number;
+  visited_at: string;
+  total_claimed: string;
+  status: string;
+  visit_notes: string | null;
+  doctor: {
+    id: number;
+    name: string;
+    specialization: string | null;
+  };
+  clinic: {
+    id: number;
+    name: string;
+    clinic_name: string;
+  };
+  services: MemberVisitHistoryService[];
+  claim: MemberVisitHistoryClaim | null;
+  documents: MemberVisitHistoryDocument[];
+};
+
+function parseMoneyField(v: unknown): string {
+  if (v == null || v === '') return '0';
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return String(v).trim() || '0';
+}
+
+function parseMemberVisitHistoryService(raw: unknown): MemberVisitHistoryService | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = Number(o.id);
+  if (!Number.isFinite(id)) return null;
+  return {
+    id,
+    service_name: String(o.service_name ?? 'Service'),
+    amount: parseMoneyField(o.amount),
+    is_consultation: o.is_consultation === true,
+  };
+}
+
+function parseMemberVisitHistoryDocument(
+  raw: unknown,
+): MemberVisitHistoryDocument | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = Number(o.id);
+  const url = String(o.url ?? '').trim();
+  if (!Number.isFinite(id) || !url) return null;
+  return {
+    id,
+    file_name: String(o.file_name ?? o.filename ?? 'Document').trim() || 'Document',
+    url,
+    document_type:
+      o.document_type == null || o.document_type === ''
+        ? null
+        : String(o.document_type),
+    uploaded_at:
+      o.uploaded_at == null || o.uploaded_at === ''
+        ? null
+        : String(o.uploaded_at),
+  };
+}
+
+function parseMemberVisitHistoryClaim(raw: unknown): MemberVisitHistoryClaim | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = Number(o.id);
+  if (!Number.isFinite(id)) return null;
+  return {
+    id,
+    claim_number: String(o.claim_number ?? ''),
+    status: String(o.status ?? ''),
+    approved_amount:
+      o.approved_amount == null || o.approved_amount === ''
+        ? null
+        : parseMoneyField(o.approved_amount),
+  };
+}
+
+function parseMemberVisitHistoryItem(raw: unknown): MemberVisitHistoryItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = Number(o.id);
+  if (!Number.isFinite(id)) return null;
+
+  const doctorRaw = o.doctor as Record<string, unknown> | undefined;
+  const clinicRaw = o.clinic as Record<string, unknown> | undefined;
+  const profileRaw = clinicRaw?.clinic_profile as Record<string, unknown> | undefined;
+
+  const servicesRaw = Array.isArray(o.services) ? o.services : [];
+  const services = servicesRaw
+    .map(parseMemberVisitHistoryService)
+    .filter((s): s is MemberVisitHistoryService => s != null);
+
+  const documentsRaw = Array.isArray(o.documents) ? o.documents : [];
+  const documents = documentsRaw
+    .map(parseMemberVisitHistoryDocument)
+    .filter((d): d is MemberVisitHistoryDocument => d != null);
+
+  return {
+    id,
+    visited_at: String(o.visited_at ?? o.created_at ?? ''),
+    total_claimed: parseMoneyField(o.total_claimed),
+    status: String(o.status ?? ''),
+    visit_notes:
+      o.visit_notes == null || o.visit_notes === ''
+        ? null
+        : String(o.visit_notes),
+    doctor: {
+      id: Number(doctorRaw?.id) || 0,
+      name: String(doctorRaw?.name ?? '—'),
+      specialization:
+        doctorRaw?.specialization == null || doctorRaw.specialization === ''
+          ? null
+          : String(doctorRaw.specialization),
+    },
+    clinic: {
+      id: Number(clinicRaw?.id) || 0,
+      name: String(clinicRaw?.name ?? ''),
+      clinic_name: String(
+        profileRaw?.clinic_name ?? clinicRaw?.name ?? '',
+      ),
+    },
+    services,
+    claim: parseMemberVisitHistoryClaim(o.claim),
+    documents,
+  };
+}
+
+function parseMemberVisitHistoryMeta(raw: unknown): MemberVisitHistoryMeta {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      current_page: 1,
+      last_page: 1,
+      total: 0,
+      has_more: false,
+    };
+  }
+  const m = raw as Record<string, unknown>;
+  const current = Number(m.current_page);
+  const last = Number(m.last_page);
+  const total = Number(m.total);
+  return {
+    current_page: Number.isFinite(current) && current > 0 ? current : 1,
+    last_page: Number.isFinite(last) && last > 0 ? last : 1,
+    total: Number.isFinite(total) && total >= 0 ? total : 0,
+    has_more: m.has_more === true,
+  };
+}
+
 /** Laravel validation / message JSON from fetch or Axios responses */
 function formatJsonErrorBody(body: unknown): string {
   if (!body || typeof body !== 'object') return '';
@@ -472,31 +644,39 @@ export async function fetchClinicOpenVisitsPage(options: {
   }
 }
 
-export async function fetchMemberVisitHistory(
+export async function fetchMemberVisitHistoryPage(
   personId: number,
-  options?: { perPage?: number },
-): Promise<{ items: unknown[]; meta: MemberVisitHistoryMeta }> {
+  options?: { perPage?: number; page?: number },
+): Promise<{ items: MemberVisitHistoryItem[]; meta: MemberVisitHistoryMeta }> {
   const perPage = options?.perPage ?? 10;
+  const page = options?.page ?? 1;
   try {
     const { data } = await api.get<{
       success?: boolean;
       data?: unknown[];
-      meta?: MemberVisitHistoryMeta;
+      meta?: unknown;
     }>(`/clinic/visits/member/${personId}/history`, {
-      params: { per_page: perPage },
+      params: { per_page: perPage, page },
     });
+    const rawItems = Array.isArray(data?.data) ? data.data : [];
+    const items = rawItems
+      .map(parseMemberVisitHistoryItem)
+      .filter((row): row is MemberVisitHistoryItem => row != null);
     return {
-      items: Array.isArray(data?.data) ? data.data : [],
-      meta: data?.meta ?? {
-        current_page: 1,
-        last_page: 1,
-        total: 0,
-        has_more: false,
-      },
+      items,
+      meta: parseMemberVisitHistoryMeta(data?.meta),
     };
   } catch (e) {
     throw new Error(errMessage(e, 'Could not load visit history.'));
   }
+}
+
+/** @deprecated Use {@link fetchMemberVisitHistoryPage} */
+export async function fetchMemberVisitHistory(
+  personId: number,
+  options?: { perPage?: number },
+): Promise<{ items: MemberVisitHistoryItem[]; meta: MemberVisitHistoryMeta }> {
+  return fetchMemberVisitHistoryPage(personId, options);
 }
 
 /** GET /clinic/services — clinic service catalogue for visits */

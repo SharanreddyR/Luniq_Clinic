@@ -15,13 +15,20 @@ import { useAuthStore } from '@/store';
  */
 export default function Index() {
   const hydrated = useAuthHydration();
+  const clinic = useAuthStore((s) => s.clinic);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const clearSession = useAuthStore((s) => s.clearSession);
   const router = useRouter();
+
+  const hasClinicSession = isAuthenticated && clinic != null;
 
   useLayoutEffect(() => {
     if (!hydrated) return;
-    router.replace(isAuthenticated ? '/home' : '/welcome');
-  }, [hydrated, isAuthenticated, router]);
+    if (isAuthenticated && !clinic) {
+      clearSession();
+    }
+    router.replace(hasClinicSession ? '/home' : '/welcome');
+  }, [hydrated, hasClinicSession, isAuthenticated, clinic, clearSession, router]);
 
   if (!hydrated) {
     return <AppBootScreen />;

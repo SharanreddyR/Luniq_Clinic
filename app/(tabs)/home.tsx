@@ -2,13 +2,22 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import type { ComponentProps, ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { Avatar, Button, Card, Text } from 'react-native-paper';
 
 import { NotificationsSheet } from '@/components/notifications/NotificationsSheet';
+import { useClinicDashboardQuery } from '@/hooks/useClinicDashboardQuery';
 import { useNotificationsInfinite } from '@/hooks/useNotifications';
+import { formatDashboardRupee } from '@/services/clinicDashboardService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -25,7 +34,7 @@ import {
   spacing,
   typography,
 } from '@/constants';
-import { useAuthStore, usePatientStore, useVisitHistoryStore } from '@/store';
+import { useAuthStore, usePatientStore } from '@/store';
 
 const DASHBOARD_CARDS: {
   key: string;
@@ -133,17 +142,83 @@ function daypartMeta(now = new Date()): {
   };
 }
 
+type StatCardProps = {
+  label: string;
+  value: string | number;
+  hint: string;
+  accent?: 'primary' | 'secondary' | 'warning';
+  loading?: boolean;
+  onPress?: () => void;
+};
+
+function StatCard({
+  label,
+  value,
+  hint,
+  accent = 'primary',
+  loading,
+  onPress,
+}: StatCardProps) {
+  const borderColor =
+    accent === 'secondary'
+      ? colors.secondaryElevated
+      : accent === 'warning'
+        ? '#E59610'
+        : colors.primary;
+
+  const content = (
+    <Card
+      style={[styles.summaryCard, { borderLeftColor: borderColor }]}
+      mode="elevated">
+      <Card.Content>
+        <Text variant="labelSmall" style={styles.summaryLabel}>
+          {label}
+        </Text>
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.primary}
+            style={styles.statLoader}
+          />
+        ) : (
+          <Text variant="headlineSmall" style={styles.summaryValue}>
+            {value}
+          </Text>
+        )}
+        <Text variant="bodySmall" style={styles.summaryHint}>
+          {hint}
+        </Text>
+      </Card.Content>
+    </Card>
+  );
+
+  const wrap = (node: ReactNode, pressable: boolean) =>
+    pressable ? (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.statPressable, pressed && styles.statPressed]}>
+        {node}
+      </Pressable>
+    ) : (
+      <View style={styles.statPressable}>{node}</View>
+    );
+
+  return wrap(content, Boolean(onPress));
+}
+
 export default function ClinicDashboardScreen() {
   const clinic = useAuthStore((s) => s.clinic);
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const activePatient = usePatientStore((s) => s.activePatient);
   const clearActivePatient = usePatientStore((s) => s.clearActivePatient);
-  const visitRecords = useVisitHistoryStore((s) => s.visits);
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsQuery = useNotificationsInfinite(20);
   const refetchNotifications = notificationsQuery.refetch;
+  const dashboardQuery = useClinicDashboardQuery({ enabled: Boolean(token) });
+  const refetchDashboard = dashboardQuery.refetch;
 
   const unreadNotifications =
     notificationsQuery.data?.pages[0]?.unread_count ?? 0;
@@ -157,17 +232,12 @@ export default function ClinicDashboardScreen() {
     useCallback(() => {
       if (!token) return;
       void refetchNotifications();
-    }, [token, refetchNotifications]),
+      void refetchDashboard();
+    }, [token, refetchNotifications, refetchDashboard]),
   );
 
-  const distinctVisitPatients = useMemo(() => {
-    const keys = new Set<string>();
-    for (const v of visitRecords) {
-      keys.add(`${v.patientId}|${v.patientCardNumber}`);
-    }
-    return keys.size;
-  }, [visitRecords]);
-
+  const stats = dashboardQuery.data;
+  const statsLoading = dashboardQuery.isLoading && !stats;
   const daypart = daypartMeta();
 
   const displayName =
@@ -344,33 +414,111 @@ export default function ClinicDashboardScreen() {
             ))}
           </ScrollView>
 
-          <View style={styles.summaryRow}>
-            <Card style={[styles.summaryCard, styles.summaryCardLeft]} mode="elevated">
-              <Card.Content>
-                <Text variant="labelSmall" style={styles.summaryLabel}>
-                  Visit records
+          <View style={styles.statsSection}>
+            <View style={styles.statsSectionHead}>
+              <Text variant="labelSmall" style={styles.sectionKicker}>
+                Overview
+              </Text>
+              <Text variant="titleMedium" style={styles.sectionTitleTight}>
+                Clinic statistics
+              </Text>
+              {dashboardQuery.isError ? (
+                <Pressable
+                  onPress={() => void refetchDashboard()}
+                  accessibilityRole="button"
+                  hitSlop={8}>
+                  <Text variant="bodySmall" style={styles.statsError}>
+                    Could not refresh stats — tap to retry
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {stats && !stats.setup.is_complete ? (
+              <Pressable
+                onPress={() => router.push('/clinic-services' as Href)}
+                style={styles.setupBanner}>
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={20}
+                  color="#B45309"
+                />
+                <Text variant="bodySmall" style={styles.setupBannerText}>
+                  Finish clinic setup so patients can find you on Luniq.
                 </Text>
-                <Text variant="headlineSmall" style={styles.summaryValue}>
-                  {visitRecords.length}
-                </Text>
-                <Text variant="bodySmall" style={styles.summaryHint}>
-                  Saved on this device
-                </Text>
-              </Card.Content>
-            </Card>
-            <Card style={[styles.summaryCard, styles.summaryCardRight]} mode="elevated">
-              <Card.Content>
-                <Text variant="labelSmall" style={styles.summaryLabel}>
-                  Patients in reports
-                </Text>
-                <Text variant="headlineSmall" style={styles.summaryValue}>
-                  {distinctVisitPatients}
-                </Text>
-                <Text variant="bodySmall" style={styles.summaryHint}>
-                  Open Reports for history
-                </Text>
-              </Card.Content>
-            </Card>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color="#B45309"
+                />
+              </Pressable>
+            ) : null}
+
+            <View style={styles.summaryRow}>
+              <StatCard
+                label="Open visits"
+                value={stats?.visits.open ?? 0}
+                hint="In progress at your clinic"
+                loading={statsLoading}
+                onPress={() => router.push('/reports' as Href)}
+              />
+              <StatCard
+                label="Visits today"
+                value={stats?.visits.today ?? 0}
+                hint="Checked in today"
+                accent="secondary"
+                loading={statsLoading}
+                onPress={() => router.push('/reports' as Href)}
+              />
+            </View>
+            <View style={styles.summaryRow}>
+              <StatCard
+                label="Pending claims"
+                value={stats?.claims.pending ?? 0}
+                hint="Awaiting review"
+                accent="warning"
+                loading={statsLoading}
+                onPress={() => router.push('/claim-status' as Href)}
+              />
+              <StatCard
+                label="Approved claims"
+                value={stats?.claims.approved ?? 0}
+                hint={
+                  stats
+                    ? `${formatDashboardRupee(stats.claims.total_approved_amount)} approved`
+                    : 'Approved total'
+                }
+                accent="secondary"
+                loading={statsLoading}
+                onPress={() => router.push('/claim-status' as Href)}
+              />
+            </View>
+            <View style={styles.summaryRow}>
+              <StatCard
+                label="Appointments today"
+                value={stats?.appointments.today ?? 0}
+                hint={
+                  stats
+                    ? `${stats.appointments.confirmed_today} confirmed`
+                    : 'Scheduled for today'
+                }
+                loading={statsLoading}
+                onPress={() => router.push('/appointments' as Href)}
+              />
+              <StatCard
+                label="Pending appointments"
+                value={stats?.appointments.pending ?? 0}
+                hint="Need confirmation"
+                loading={statsLoading}
+                onPress={() => router.push('/appointments' as Href)}
+              />
+            </View>
+            {stats ? (
+              <Text variant="bodySmall" style={styles.statsFootnote}>
+                This month: {stats.visits.this_month} submitted visits ·{' '}
+                {stats.claims.this_month} claims · {stats.claims.settled} settled
+              </Text>
+            ) : null}
           </View>
 
           {activePatient ? (
@@ -640,16 +788,63 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: -0.2,
   },
+  statsSection: {
+    marginBottom: spacing.lg,
+  },
+  statsSectionHead: {
+    marginBottom: spacing.sm,
+  },
+  statsError: {
+    color: colors.error,
+    marginTop: spacing.xs,
+    fontWeight: '600',
+  },
+  setupBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: 'rgba(180, 83, 9, 0.25)',
+  },
+  setupBannerText: {
+    flex: 1,
+    color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 18,
+  },
   summaryRow: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  statPressable: {
+    flex: 1,
+  },
+  statPressed: {
+    opacity: 0.92,
+  },
+  statLoader: {
+    alignSelf: 'flex-start',
+    marginVertical: spacing.sm,
+  },
+  statsFootnote: {
+    color: colors.textMuted,
+    textAlign: 'center',
+    fontWeight: '500',
+    lineHeight: 18,
+    marginTop: spacing.xs,
   },
   summaryCard: {
     flex: 1,
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: 'rgba(10, 82, 87, 0.1)',
+    borderLeftWidth: 4,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     ...shadows.card,
@@ -658,14 +853,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
-  },
-  summaryCardLeft: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
-  },
-  summaryCardRight: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.secondaryElevated,
   },
   summaryLabel: {
     color: colors.textMuted,

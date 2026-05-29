@@ -8,7 +8,10 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { clinicScreen, spacing } from '@/constants';
 import { colors } from '@/constants/Colors';
 import { useLoginMutation } from '@/hooks/useLoginMutation';
-import { LOGIN_INVALID_CREDENTIALS_MESSAGE } from '@/services/authService';
+import {
+  LOGIN_INVALID_CREDENTIALS_MESSAGE,
+  LOGIN_WRONG_APP_ROLE_MESSAGE,
+} from '@/services/authService';
 import { isValidPhoneOrEmail } from '@/utils';
 
 const SCROLL_TOP_PADDING = 20;
@@ -64,6 +67,9 @@ export default function LoginScreen() {
             err instanceof Error ? err.message : 'Sign-in failed. Try again.';
           const lower = msg.toLowerCase();
           const isDeactivated = lower.includes('deactivated');
+          const isWrongApp =
+            msg === LOGIN_WRONG_APP_ROLE_MESSAGE ||
+            lower.includes('luniq care card');
           const isCredentialFailure =
             msg === LOGIN_INVALID_CREDENTIALS_MESSAGE ||
             lower.includes('invalid credential') ||
@@ -73,6 +79,10 @@ export default function LoginScreen() {
             /something went wrong|went wrong.*try again/i.test(msg);
           if (isDeactivated) {
             Alert.alert('Unable to sign in', msg);
+            return;
+          }
+          if (isWrongApp) {
+            Alert.alert('Use Luniq Care Card', msg);
             return;
           }
           if (isCredentialFailure) {

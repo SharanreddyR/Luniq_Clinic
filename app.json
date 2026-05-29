@@ -5,7 +5,7 @@
     "slug": "luniq-clinic",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-launcher-foreground.png",
     "scheme": "luniq-clinic",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -16,7 +16,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.luniqcare.clinicapp",
+      "bundleIdentifier": "com.luniqhealth.luniqclinic",
       "googleServicesFile": "./credentials/GoogleService-Info.plist",
       "infoPlist": {
         "CFBundleDisplayName": "Luniq Clinic",
@@ -25,10 +25,10 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/images/app-launcher-foreground.png",
+        "backgroundColor": "#0D2B2B"
       },
-      "package": "com.luniqcare.clinicapp",
+      "package": "com.luniqhealth.luniqclinic",
       "googleServicesFile": "./credentials/google-services.json",
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"

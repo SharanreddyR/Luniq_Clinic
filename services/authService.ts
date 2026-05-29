@@ -4,7 +4,6 @@ import { normalizeLoginIdentifier } from '@/utils/validation';
 import { api } from '@/services/http';
 import type {
   ApiAuthUser,
-  AuthUser,
   Clinic,
   ClinicLoginResponse,
   LoginApiEnvelope,
@@ -24,15 +23,6 @@ export type ClinicLoginPayload = {
   password: string;
 };
 
-function mapApiUserToAuthUser(u: ApiAuthUser): AuthUser {
-  return {
-    id: String(u.id),
-    name: u.name,
-    email: u.email ?? '',
-    phone: u.phone ?? undefined,
-  };
-}
-
 function mapClinicFromApiUser(u: ApiAuthUser): Clinic {
   const cp = u.clinic_profile;
   return {
@@ -46,6 +36,12 @@ function mapClinicFromApiUser(u: ApiAuthUser): Clinic {
 
 /** User-facing copy for wrong email/password (matches login screen + Alert). */
 export const LOGIN_INVALID_CREDENTIALS_MESSAGE = 'Invalid credentials';
+
+/** Member (`user`) accounts must use Luniq Care Card, not this clinic app. */
+export const LOGIN_WRONG_APP_ROLE_MESSAGE =
+  'This account is for Luniq members. Please sign in with the Luniq Care Card app.';
+
+const CLINIC_ROLE = 'clinic';
 
 function isGenericServerFailureMessage(message: string): boolean {
   return /something went wrong|went wrong.*try again/i.test(message);
@@ -120,18 +116,14 @@ export async function loginRequest(
 
     const u = data.data.user;
 
-    if (u.role === 'clinic') {
-      return {
-        kind: 'clinic',
-        token: data.data.token,
-        clinic: mapClinicFromApiUser(u),
-      };
+    if (u.role !== CLINIC_ROLE) {
+      throw new Error(LOGIN_WRONG_APP_ROLE_MESSAGE);
     }
 
     return {
-      kind: 'user',
+      kind: 'clinic',
       token: data.data.token,
-      user: mapApiUserToAuthUser(u),
+      clinic: mapClinicFromApiUser(u),
     };
   } catch (err) {
     throw new Error(loginErrorMessage(err));

@@ -6,7 +6,6 @@ import { useAuthStore } from '@/store';
 
 export function useLoginMutation() {
   const setClinicSession = useAuthStore((s) => s.setClinicSession);
-  const setUserSession = useAuthStore((s) => s.setUserSession);
 
   return useMutation({
     mutationFn: ({
@@ -17,11 +16,7 @@ export function useLoginMutation() {
       password: string;
     }) => loginRequest(phoneOrEmail, password),
     onSuccess: async (data) => {
-      if (data.kind === 'clinic') {
-        setClinicSession(data.token, data.clinic);
-      } else {
-        setUserSession(data.token, data.user);
-      }
+      setClinicSession(data.token, data.clinic);
       await registerFcmAfterAuth('login');
     },
   });

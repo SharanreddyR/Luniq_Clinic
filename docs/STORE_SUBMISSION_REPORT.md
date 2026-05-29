@@ -16,8 +16,8 @@
 | **Expo slug** | `luniq-clinic` |
 | **Expo owner** | `luniqcare` |
 | **EAS project ID** | `a8747032-54ba-4867-8b6e-5d7bddd86b04` |
-| **Android application ID** | `com.luniqcare.clinicapp` |
-| **iOS bundle identifier** | `com.luniqcare.clinicapp` |
+| **Android application ID** | `com.luniqhealth.luniqclinic` |
+| **iOS bundle identifier** | `com.luniqhealth.luniqclinic` |
 | **Marketing version** (current `app.json`) | `1.0.0` |
 | **Deep link / app scheme** | `luniq-clinic` |
 | **Orientation** | Portrait |
@@ -82,7 +82,7 @@
 
 ## 6. Google Play — submission checklist
 
-1. **Play Console app** with package `com.luniqcare.clinicapp` (must match `app.json`).
+1. **Play Console app** with package `com.luniqhealth.luniqclinic` (must match `app.json`).
 2. **Release artifact:** **AAB** — `eas build --platform android --profile production` (or `npm run build:android:aab`).
 3. **Signing:** Use **Play App Signing**; first EAS build configures or uploads keystore as prompted.
 4. **Target / compile SDK:** Set by Expo/React Native toolchain at build time (EAS log / `expo prebuild` output — include in compliance answers if asked).
@@ -98,7 +98,7 @@
 
 ## 7. Apple App Store — submission checklist
 
-1. **App Store Connect** app record with bundle id **`com.luniqcare.clinicapp`** (must match Xcode/EAS build).
+1. **App Store Connect** app record with bundle id **`com.luniqhealth.luniqclinic`** (must match Xcode/EAS build).
 2. **Archive:** `eas build --platform ios --profile production` (or `npm run build:ios:store`) — produces **IPA** for upload / TestFlight.
 3. **Distribution certificates & provisioning:** EAS-managed (recommended) or upload your own; match team id and bundle id.
 4. **Encryption export:** `ITSAppUsesNonExemptEncryption: false` — answer App Store Connect encryption questions consistently.

@@ -52,7 +52,9 @@ export type LoginApiEnvelope = {
   };
 };
 
-/** Result of POST /auth/login mapped for the app session store. */
-export type LoginResult =
-  | { kind: 'clinic'; token: string; clinic: Clinic }
-  | { kind: 'user'; token: string; user: AuthUser };
+/** Result of POST /auth/login for clinic app (role must be `clinic`). */
+export type LoginResult = {
+  kind: 'clinic';
+  token: string;
+  clinic: Clinic;
+};
